@@ -1,0 +1,8 @@
+[client]
+# Oculta el botón de Deploy y simplifica el menú
+toolbarMode = "minimal"
+showErrorDetails = false
+
+[ui]
+# Hace que la interfaz se vea más limpia
+hideTopBar = true

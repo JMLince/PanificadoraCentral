@@ -1,0 +1,10 @@
+# Datos de la aplicación (CSV)
+data/*.csv
+
+# Entornos virtuales de Python
+venv/
+.env
+
+# Archivos temporales de sistema
+__pycache__/
+.DS_Store

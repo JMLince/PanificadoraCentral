@@ -728,7 +728,6 @@ if perfil in ["admin", "encargado"]:
                     key="f_p",
                 )
             with c3:
-                # Bloqueo de fechas futuras en Producción
                 f_ini = st.date_input(
                     "Desde:",
                     datetime.now().date() - timedelta(days=7),
@@ -751,6 +750,7 @@ if perfil in ["admin", "encargado"]:
             if op_prod != "Todos":
                 df_filtro = df_filtro[df_filtro["TIPO DE PAN"] == op_prod]
 
+            # MEJORA: Validación de datos existentes tras el filtrado
             if not df_filtro.empty:
                 st.metric("Total Masas Producidas", f"{df_filtro['MASAS'].sum():.1f}")
 
@@ -774,6 +774,10 @@ if perfil in ["admin", "encargado"]:
                     use_container_width=True,
                     hide_index=True,
                 )
+            else:
+                st.info(
+                    "No existen datos para mostrar según fechas seleccionadas."
+                )  # <--- Mensaje solicitado
 
         st.divider()
 
@@ -783,24 +787,22 @@ if perfil in ["admin", "encargado"]:
             df_s = pd.read_csv("data/historial_stock.csv")
             df_s["Fecha"] = pd.to_datetime(df_s["Fecha"]).dt.date
 
-            # Selector de fechas para la Auditoría de Stock con bloqueo de futuro
             col_s1, col_s2 = st.columns(2)
             with col_s1:
                 f_stock_ini = st.date_input(
                     "Stock desde:",
                     datetime.now().date() - timedelta(days=3),
                     key="s_ini",
-                    max_value=datetime.now().date(),  # Bloqueo aquí
+                    max_value=datetime.now().date(),
                 )
             with col_s2:
                 f_stock_fin = st.date_input(
                     "Stock hasta:",
                     datetime.now().date(),
                     key="s_fin",
-                    max_value=datetime.now().date(),  # Bloqueo aquí
+                    max_value=datetime.now().date(),
                 )
 
-            # Filtrado de la tabla de stock
             df_s_filtrado = df_s[
                 (df_s["Fecha"] >= f_stock_ini) & (df_s["Fecha"] <= f_stock_fin)
             ].copy()
@@ -812,7 +814,9 @@ if perfil in ["admin", "encargado"]:
                     hide_index=True,
                 )
             else:
-                st.warning("No hay registros de stock para el rango seleccionado.")
+                st.info(
+                    "No existen datos de stock para mostrar según fechas seleccionadas."
+                )
 
 # ========================================================
 # PESTAÑA 5: AJUSTES MAESTROS (Solo Admin)

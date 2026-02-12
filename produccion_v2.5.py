@@ -167,7 +167,7 @@ datos_tecnicos = {
 }
 df_base = pd.DataFrame(datos_tecnicos)
 
-st.title(f"🍞 Gestión de Producción v2.5")
+st.title(f"🍞 Gestión de Producción y Stock v2.5 PRO")
 
 # --- 2. PANEL DE CONTROL (SIDEBAR) ---
 with st.sidebar:

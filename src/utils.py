@@ -23,47 +23,76 @@ def guardar_en_historial(df, turno, usuario, comentario=None):
     fecha_hoy = datetime.now().strftime("%Y-%m-%d")
     hora_registro = datetime.now().strftime("%H:%M:%S")
 
-    # Creamos la copia para el registro
-    df_registro = df.copy()
-    df_registro["Fecha"] = fecha_hoy
-    df_registro["Hora"] = hora_registro
-    df_registro["Turno"] = turno
-    df_registro["Usuario"] = usuario
-    df_registro["Comentario"] = comentario if comentario else ""
+    # 1. Preparar el nuevo registro
+    df_nuevo = df.copy()
+    df_nuevo["Fecha"] = fecha_hoy
+    df_nuevo["Hora"] = hora_registro
+    df_nuevo["Turno"] = turno
+    df_nuevo["Usuario"] = usuario
+    df_nuevo["Comentario"] = comentario if comentario else ""
 
     if os.path.exists(ruta_historial):
         try:
             historial = pd.read_csv(ruta_historial)
-
-            # Buscamos si ya existe el registro de hoy/turno
             ya_existe = historial[
                 (historial["Fecha"] == fecha_hoy) & (historial["Turno"] == turno)
             ]
 
             if not ya_existe.empty:
-                # Si el Admin NO mandó comentario, bloqueamos el duplicado
                 if not comentario:
-                    return (
-                        False,
-                        "Ya existe un registro confirmado para este turno hoy.",
-                    )
+                    return False, "Ya existe un registro confirmado."
 
-                # Si HAY comentario, es un AJUSTE: Borramos lo anterior para este turno y día
-                historial = historial[
-                    ~((historial["Fecha"] == fecha_hoy) & (historial["Turno"] == turno))
-                ]
-                nuevo_historial = pd.concat([historial, df_registro], ignore_index=True)
+                # --- LÓGICA DE AJUSTE QUIRÚRGICO ---
+                movimientos_ajuste = []
+
+                # Unimos el registro viejo con el nuevo para comparar
+                # Asumimos que "TIPO DE PAN" es la clave única
+                comparativa = pd.merge(
+                    ya_existe[["TIPO DE PAN", "MASAS"]],
+                    df_nuevo[["TIPO DE PAN", "MASAS"]],
+                    on="TIPO DE PAN",
+                    suffixes=("_viejo", "_nuevo"),
+                )
+
+                for _, fila in comparativa.iterrows():
+                    val_v = fila["MASAS_viejo"]
+                    val_n = fila["MASAS_nuevo"]
+
+                    if val_v != val_n:
+                        # 1. Anulación parcial (Solo de lo que cambió)
+                        anulacion = df_nuevo[
+                            df_nuevo["TIPO DE PAN"] == fila["TIPO DE PAN"]
+                        ].copy()
+                        anulacion["MASAS"] = -val_v
+                        anulacion["Comentario"] = f"ANULACIÓN PARCIAL: {comentario}"
+
+                        # 2. Nuevo valor (Solo del que cambió)
+                        correccion = df_nuevo[
+                            df_nuevo["TIPO DE PAN"] == fila["TIPO DE PAN"]
+                        ].copy()
+                        correccion["MASAS"] = val_n
+                        correccion["Comentario"] = comentario
+
+                        movimientos_ajuste.extend([anulacion, correccion])
+
+                if movimientos_ajuste:
+                    df_ajustes = pd.concat(movimientos_ajuste, ignore_index=True)
+                    nuevo_historial = pd.concat(
+                        [historial, df_ajustes], ignore_index=True
+                    )
+                else:
+                    return True, "No se detectaron cambios en los valores."
             else:
-                # Si no existe, simplemente agregamos
-                nuevo_historial = pd.concat([historial, df_registro], ignore_index=True)
+                nuevo_historial = pd.concat([historial, df_nuevo], ignore_index=True)
+
         except Exception as e:
-            return False, f"Error al leer historial: {e}"
+            return False, f"Error al procesar: {e}"
     else:
-        nuevo_historial = df_registro
+        nuevo_historial = df_nuevo
 
     try:
         nuevo_historial.to_csv(ruta_historial, index=False)
-        return True, "Operación realizada con éxito."
+        return True, "Ajuste parcial guardado con éxito."
     except Exception as e:
         return False, f"Error al guardar: {e}"
 

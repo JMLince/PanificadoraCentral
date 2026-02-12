@@ -657,6 +657,7 @@ with tabs[3]:
                         "Confirmar Ajuste Autorizado",
                         type="primary",
                         use_container_width=True,
+                        key="btn_ajuste_tarde",
                     ):
                         if len(motivo) >= 5:
                             exito, _ = guardar_en_historial(
@@ -668,7 +669,7 @@ with tabs[3]:
                             if exito:
                                 st.rerun()
 
-            elif not esta_confirmado:
+            elif not esta_confirmado_t:
                 # --- CAMBIO AQUÍ: Solo Admin y Encargado ven el botón ---
                 if st.session_state.perfil in ["admin", "encargado"]:
                     if st.button(

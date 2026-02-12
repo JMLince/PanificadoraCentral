@@ -707,12 +707,15 @@ with tabs[3]:
 # ========================================================
 if perfil in ["admin", "encargado"]:
     with tabs[4]:
-        st.header("📊 Panel de Control y Estadísticas")
+        st.header("📊 Panel de Control y Auditoría")
+
+        # --- SECCIÓN 1: PRODUCCIÓN (Masas) ---
         if os.path.exists("data/historial_produccion.csv"):
+            st.subheader("📈 Histórico de Producción")
             df_hist = pd.read_csv("data/historial_produccion.csv")
             df_hist["Fecha"] = pd.to_datetime(df_hist["Fecha"]).dt.date
 
-            # Filtros
+            # Filtros de Producción
             c1, c2, c3 = st.columns([1, 1, 2])
             with c1:
                 op_turno = st.selectbox(
@@ -725,59 +728,91 @@ if perfil in ["admin", "encargado"]:
                     key="f_p",
                 )
             with c3:
+                # Bloqueo de fechas futuras en Producción
                 f_ini = st.date_input(
-                    "Desde:", datetime.now().date() - timedelta(days=7), key="f_i"
+                    "Desde:",
+                    datetime.now().date() - timedelta(days=7),
+                    key="f_i",
+                    max_value=datetime.now().date(),
                 )
-                f_fin = st.date_input("Hasta:", datetime.now().date(), key="f_f")
+                f_fin = st.date_input(
+                    "Hasta:",
+                    datetime.now().date(),
+                    key="f_f",
+                    max_value=datetime.now().date(),
+                )
 
             df_filtro = df_hist[
                 (df_hist["Fecha"] >= f_ini) & (df_hist["Fecha"] <= f_fin)
             ].copy()
+
             if op_turno != "Total Día":
                 df_filtro = df_filtro[df_filtro["Turno"] == op_turno]
             if op_prod != "Todos":
                 df_filtro = df_filtro[df_filtro["TIPO DE PAN"] == op_prod]
 
             if not df_filtro.empty:
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Total Masas", f"{df_filtro['MASAS'].sum():.1f}")
-                st.bar_chart(
-                    df_filtro.groupby(["Fecha", "TIPO DE PAN"])["MASAS"]
-                    .sum()
-                    .reset_index(),
-                    x="Fecha",
-                    y="MASAS",
-                    color="TIPO DE PAN",
+                st.metric("Total Masas Producidas", f"{df_filtro['MASAS'].sum():.1f}")
+
+                cols_prod = [
+                    c
+                    for c in [
+                        "Fecha",
+                        "Hora",
+                        "Turno",
+                        "TIPO DE PAN",
+                        "MASAS",
+                        "Usuario",
+                        "Comentario",
+                    ]
+                    if c in df_filtro.columns
+                ]
+                st.dataframe(
+                    df_filtro[cols_prod].sort_values(
+                        by=["Fecha", "Hora"], ascending=False
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
                 )
 
-                with st.expander("📝 Auditoría de Producción"):
-                    cols = [
-                        c
-                        for c in [
-                            "Fecha",
-                            "Hora",
-                            "Turno",
-                            "TIPO DE PAN",
-                            "MASAS",
-                            "Usuario",
-                            "Comentario",
-                        ]
-                        if c in df_filtro.columns
-                    ]
-                    st.dataframe(
-                        df_filtro[cols].sort_values(by=["Fecha"], ascending=False),
-                        use_container_width=True,
-                        hide_index=True,
-                    )
+        st.divider()
 
-        st.subheader("📋 Auditoría de Stock Inicial")
+        # --- SECCIÓN 2: AUDITORÍA DE STOCK INICIAL ---
+        st.subheader("📋 Auditoría de Stock y Pedidos (PA/RPD)")
         if os.path.exists("data/historial_stock.csv"):
             df_s = pd.read_csv("data/historial_stock.csv")
-            st.dataframe(
-                df_s.sort_values(by=["Fecha"], ascending=False),
-                use_container_width=True,
-                hide_index=True,
-            )
+            df_s["Fecha"] = pd.to_datetime(df_s["Fecha"]).dt.date
+
+            # Selector de fechas para la Auditoría de Stock con bloqueo de futuro
+            col_s1, col_s2 = st.columns(2)
+            with col_s1:
+                f_stock_ini = st.date_input(
+                    "Stock desde:",
+                    datetime.now().date() - timedelta(days=3),
+                    key="s_ini",
+                    max_value=datetime.now().date(),  # Bloqueo aquí
+                )
+            with col_s2:
+                f_stock_fin = st.date_input(
+                    "Stock hasta:",
+                    datetime.now().date(),
+                    key="s_fin",
+                    max_value=datetime.now().date(),  # Bloqueo aquí
+                )
+
+            # Filtrado de la tabla de stock
+            df_s_filtrado = df_s[
+                (df_s["Fecha"] >= f_stock_ini) & (df_s["Fecha"] <= f_stock_fin)
+            ].copy()
+
+            if not df_s_filtrado.empty:
+                st.dataframe(
+                    df_s_filtrado.sort_values(by=["Fecha", "Hora"], ascending=False),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+            else:
+                st.warning("No hay registros de stock para el rango seleccionado.")
 
 # ========================================================
 # PESTAÑA 5: AJUSTES MAESTROS (Solo Admin)

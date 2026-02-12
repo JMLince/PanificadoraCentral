@@ -23,78 +23,83 @@ def guardar_en_historial(df, turno, usuario, comentario=None):
     fecha_hoy = datetime.now().strftime("%Y-%m-%d")
     hora_registro = datetime.now().strftime("%H:%M:%S")
 
-    # 1. Preparar el nuevo registro
-    df_nuevo = df.copy()
-    df_nuevo["Fecha"] = fecha_hoy
-    df_nuevo["Hora"] = hora_registro
-    df_nuevo["Turno"] = turno
-    df_nuevo["Usuario"] = usuario
-    df_nuevo["Comentario"] = comentario if comentario else ""
+    # 1. Preparar el DataFrame de la sesión actual
+    df_actual = df.copy()
 
     if os.path.exists(ruta_historial):
         try:
-            historial = pd.read_csv(ruta_historial)
-            ya_existe = historial[
-                (historial["Fecha"] == fecha_hoy) & (historial["Turno"] == turno)
-            ]
+            historial_completo = pd.read_csv(ruta_historial)
+            # Calculamos cuánto hay registrado actualmente para este día y turno (Suma neta)
+            ya_registrado = (
+                historial_completo[
+                    (historial_completo["Fecha"] == fecha_hoy)
+                    & (historial_completo["Turno"] == turno)
+                ]
+                .groupby("TIPO DE PAN")["MASAS"]
+                .sum()
+                .reset_index()
+            )
 
-            if not ya_existe.empty:
+            if not ya_registrado.empty:
                 if not comentario:
-                    return False, "Ya existe un registro confirmado."
+                    return False, "Ya existe un registro. Use 'Corregir' con motivo."
 
-                # --- LÓGICA DE AJUSTE QUIRÚRGICO ---
-                movimientos_ajuste = []
+                # --- LÓGICA DE DIFERENCIA NETA (MÁXIMA EFICIENCIA) ---
+                ajustes = []
+                for _, fila_nueva in df_actual.iterrows():
+                    pan = fila_nueva["TIPO DE PAN"]
+                    valor_nuevo = fila_nueva["MASAS"]
 
-                # Unimos el registro viejo con el nuevo para comparar
-                # Asumimos que "TIPO DE PAN" es la clave única
-                comparativa = pd.merge(
-                    ya_existe[["TIPO DE PAN", "MASAS"]],
-                    df_nuevo[["TIPO DE PAN", "MASAS"]],
-                    on="TIPO DE PAN",
-                    suffixes=("_viejo", "_nuevo"),
-                )
+                    # Buscamos cuánto sumaba ese pan en el historial
+                    valor_anterior = ya_registrado.loc[
+                        ya_registrado["TIPO DE PAN"] == pan, "MASAS"
+                    ].values
+                    valor_anterior = valor_anterior[0] if len(valor_anterior) > 0 else 0
 
-                for _, fila in comparativa.iterrows():
-                    val_v = fila["MASAS_viejo"]
-                    val_n = fila["MASAS_nuevo"]
+                    diferencia = valor_nuevo - valor_anterior
 
-                    if val_v != val_n:
-                        # 1. Anulación parcial (Solo de lo que cambió)
-                        anulacion = df_nuevo[
-                            df_nuevo["TIPO DE PAN"] == fila["TIPO DE PAN"]
-                        ].copy()
-                        anulacion["MASAS"] = -val_v
-                        anulacion["Comentario"] = f"ANULACIÓN PARCIAL: {comentario}"
+                    if diferencia != 0:
+                        # Solo guardamos el movimiento que ajusta el saldo
+                        nueva_fila = fila_nueva.copy()
+                        nueva_fila["MASAS"] = diferencia
+                        nueva_fila["Fecha"] = fecha_hoy
+                        nueva_fila["Hora"] = hora_registro
+                        nueva_fila["Turno"] = turno
+                        nueva_fila["Usuario"] = usuario
+                        nueva_fila["Comentario"] = f"AJUSTE: {comentario}"
+                        ajustes.append(nueva_fila)
 
-                        # 2. Nuevo valor (Solo del que cambió)
-                        correccion = df_nuevo[
-                            df_nuevo["TIPO DE PAN"] == fila["TIPO DE PAN"]
-                        ].copy()
-                        correccion["MASAS"] = val_n
-                        correccion["Comentario"] = comentario
-
-                        movimientos_ajuste.extend([anulacion, correccion])
-
-                if movimientos_ajuste:
-                    df_ajustes = pd.concat(movimientos_ajuste, ignore_index=True)
+                if ajustes:
+                    df_final_ajustes = pd.DataFrame(ajustes)
                     nuevo_historial = pd.concat(
-                        [historial, df_ajustes], ignore_index=True
+                        [historial_completo, df_final_ajustes], ignore_index=True
                     )
                 else:
-                    return True, "No se detectaron cambios en los valores."
+                    return True, "No hubo cambios en los valores."
             else:
-                nuevo_historial = pd.concat([historial, df_nuevo], ignore_index=True)
+                # Es la primera carga del turno
+                df_actual["Fecha"] = fecha_hoy
+                df_actual["Hora"] = hora_registro
+                df_actual["Turno"] = turno
+                df_actual["Usuario"] = usuario
+                df_actual["Comentario"] = ""
+                nuevo_historial = pd.concat(
+                    [historial_completo, df_actual], ignore_index=True
+                )
 
         except Exception as e:
-            return False, f"Error al procesar: {e}"
+            return False, f"Error: {e}"
     else:
-        nuevo_historial = df_nuevo
+        # El archivo no existe, primera carga total
+        df_actual["Fecha"] = fecha_hoy
+        df_actual["Hora"] = hora_registro
+        df_actual["Turno"] = turno
+        df_actual["Usuario"] = usuario
+        df_actual["Comentario"] = "Carga Inicial"
+        nuevo_historial = df_actual
 
-    try:
-        nuevo_historial.to_csv(ruta_historial, index=False)
-        return True, "Ajuste parcial guardado con éxito."
-    except Exception as e:
-        return False, f"Error al guardar: {e}"
+    nuevo_historial.to_csv(ruta_historial, index=False)
+    return True, "Ajuste de saldo guardado."
 
 
 def guardar_historial_stock(df_rpd, df_pa, usuario, comentario=""):

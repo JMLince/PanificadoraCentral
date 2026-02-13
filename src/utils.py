@@ -23,74 +23,80 @@ def guardar_en_historial(df, turno, usuario, comentario=None):
     fecha_hoy = datetime.now().strftime("%Y-%m-%d")
     hora_registro = datetime.now().strftime("%H:%M:%S")
 
-    # 1. Preparar el DataFrame de la sesión actual
+    # 1. Limpieza de datos entrantes
     df_actual = df.copy()
+    df_actual["MASAS"] = pd.to_numeric(df_actual["MASAS"], errors="coerce").fillna(0)
 
     if os.path.exists(ruta_historial):
         try:
             historial_completo = pd.read_csv(ruta_historial)
-            # Calculamos cuánto hay registrado actualmente para este día y turno (Suma neta)
-            ya_registrado = (
-                historial_completo[
-                    (historial_completo["Fecha"] == fecha_hoy)
-                    & (historial_completo["Turno"] == turno)
-                ]
-                .groupby("TIPO DE PAN")["MASAS"]
-                .sum()
-                .reset_index()
+
+            # 2. Obtener el SALDO ACTUAL real del historial para este día y turno
+            # Esto es vital: sumamos todo lo que hay (cargas + ajustes previos)
+            mask_hoy = (historial_completo["Fecha"].astype(str) == fecha_hoy) & (
+                historial_completo["Turno"] == turno
             )
+
+            ya_registrado = historial_completo[mask_hoy]
 
             if not ya_registrado.empty:
                 if not comentario:
-                    return False, "Ya existe un registro. Use 'Corregir' con motivo."
+                    return False, "Ya existe un registro confirmado."
 
-                # --- LÓGICA DE DIFERENCIA NETA (MÁXIMA EFICIENCIA) ---
-                ajustes = []
+                # Agrupamos para saber el total neto actual por producto
+                saldos_actuales = (
+                    ya_registrado.groupby("TIPO DE PAN")["MASAS"].sum().to_dict()
+                )
+
+                ajustes_reales = []
                 for _, fila_nueva in df_actual.iterrows():
                     pan = fila_nueva["TIPO DE PAN"]
-                    valor_nuevo = fila_nueva["MASAS"]
+                    valor_final_deseado = float(fila_nueva["MASAS"])
+                    valor_en_historial = float(saldos_actuales.get(pan, 0))
 
-                    # Buscamos cuánto sumaba ese pan en el historial
-                    valor_anterior = ya_registrado.loc[
-                        ya_registrado["TIPO DE PAN"] == pan, "MASAS"
-                    ].values
-                    valor_anterior = valor_anterior[0] if len(valor_anterior) > 0 else 0
+                    # CÁLCULO DE LA DIFERENCIA EXACTA
+                    diferencia = round(valor_final_deseado - valor_en_historial, 2)
 
-                    diferencia = valor_nuevo - valor_anterior
+                    # SOLO SI HAY DIFERENCIA, CREAMOS UNA FILA
+                    if abs(diferencia) > 0.001:
+                        nueva_fila = {
+                            "TIPO DE PAN": pan,
+                            "MASAS": diferencia,
+                            "Fecha": fecha_hoy,
+                            "Hora": hora_registro,
+                            "Turno": turno,
+                            "Usuario": usuario,
+                            "Comentario": f"AJUSTE: {comentario}",
+                        }
+                        # Mantener columnas adicionales (Corte, Tapa) si existen
+                        for col in ["CORTE", "TAPA"]:
+                            if col in fila_nueva:
+                                nueva_fila[col] = fila_nueva[col]
 
-                    if diferencia != 0:
-                        # Solo guardamos el movimiento que ajusta el saldo
-                        nueva_fila = fila_nueva.copy()
-                        nueva_fila["MASAS"] = diferencia
-                        nueva_fila["Fecha"] = fecha_hoy
-                        nueva_fila["Hora"] = hora_registro
-                        nueva_fila["Turno"] = turno
-                        nueva_fila["Usuario"] = usuario
-                        nueva_fila["Comentario"] = f"AJUSTE: {comentario}"
-                        ajustes.append(nueva_fila)
+                        ajustes_reales.append(nueva_fila)
 
-                if ajustes:
-                    df_final_ajustes = pd.DataFrame(ajustes)
+                if ajustes_reales:
+                    df_final_ajustes = pd.DataFrame(ajustes_reales)
                     nuevo_historial = pd.concat(
                         [historial_completo, df_final_ajustes], ignore_index=True
                     )
                 else:
-                    return True, "No hubo cambios en los valores."
+                    return True, "No se detectaron cambios que requieran ajuste."
             else:
-                # Es la primera carga del turno
+                # Primera carga del día (aquí sí van las 14 filas originales)
                 df_actual["Fecha"] = fecha_hoy
                 df_actual["Hora"] = hora_registro
                 df_actual["Turno"] = turno
                 df_actual["Usuario"] = usuario
-                df_actual["Comentario"] = ""
+                df_actual["Comentario"] = "Carga Inicial"
                 nuevo_historial = pd.concat(
                     [historial_completo, df_actual], ignore_index=True
                 )
 
         except Exception as e:
-            return False, f"Error: {e}"
+            return False, f"Error: {str(e)}"
     else:
-        # El archivo no existe, primera carga total
+        # Si el archivo no existe
         df_actual["Fecha"] = fecha_hoy
         df_actual["Hora"] = hora_registro
         df_actual["Turno"] = turno
@@ -99,7 +105,7 @@ def guardar_en_historial(df, turno, usuario, comentario=None):
         nuevo_historial = df_actual
 
     nuevo_historial.to_csv(ruta_historial, index=False)
-    return True, "Ajuste de saldo guardado."
+    return True, "Registro actualizado."
 
 
 def guardar_historial_stock(df_rpd, df_pa, usuario, comentario=""):

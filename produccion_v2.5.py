@@ -768,17 +768,40 @@ if perfil in ["admin", "encargado"]:
                     ]
                     if c in df_filtro.columns
                 ]
+
+                # --- LÓGICA DE MAQUILLAJE VISUAL ---
+                def estilado_auditoria(row):
+                    estilo = [""] * len(row)
+                    val = row["MASAS"]
+                    coment = str(row["Comentario"])
+
+                    # 1. Ajuste Negativo (Descuento): Rojo + Negrita
+                    if val < 0:
+                        estilo = ["color: #FF4B4B; font-weight: bold;"] * len(row)
+                    # 2. Ajuste Positivo (Incremento): Verde + Negrita
+                    elif "AJUSTE" in coment and val > 0:
+                        estilo = ["color: #09AB3B; font-weight: bold;"] * len(row)
+
+                    return estilo
+
+                # Preparamos el DataFrame ordenado
+                df_mostrar = df_filtro[cols_prod].sort_values(
+                    by=["Fecha", "Hora"], ascending=False
+                )
+
+                # Aplicamos el estilo
+                df_estilado = df_mostrar.style.apply(estilado_auditoria, axis=1).format(
+                    subset=["MASAS"], formatter="{:.1f}"
+                )
+
+                st.write("**Detalle de Auditoría de Movimientos:**")
                 st.dataframe(
-                    df_filtro[cols_prod].sort_values(
-                        by=["Fecha", "Hora"], ascending=False
-                    ),
+                    df_estilado,
                     use_container_width=True,
                     hide_index=True,
                 )
             else:
-                st.info(
-                    "No existen datos para mostrar según fechas seleccionadas."
-                )  # <--- Mensaje solicitado
+                st.info("No existen datos para mostrar según fechas seleccionadas.")
 
         st.divider()
 

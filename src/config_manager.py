@@ -117,6 +117,8 @@ def cargar_ajustes():
 
 
 def guardar_ajustes(df):
+    ruta = "data/ajustes_produccion.json"
+    # Convertimos el DataFrame a diccionario y luego a JSON
     dict_ajustes = df.to_dict(orient="records")
-    with open(ARCHIVO_AJUSTES, "w") as f:
-        json.dump(dict_ajustes, f, indent=4)
+    with open(ruta, "w", encoding="utf-8") as f:
+        json.dump(dict_ajustes, f, indent=4, ensure_ascii=False)

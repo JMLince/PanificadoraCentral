@@ -5,6 +5,7 @@ import signal
 import time
 from datetime import datetime, timedelta
 
+# st.cache_data.clear() -- comentada para prueba con carga aj. maestros
 
 # IMPORTACIONES MODULARES DESDE TU CARPETA SRC
 from src.utils import aplicar_redondeo, guardar_en_historial
@@ -250,6 +251,8 @@ if perfil == "admin":
         "🌇 Tarde",
         "📊 Estadísticas",
         "⚙️ Ajustes",
+        "👥 Clientes",
+        "📝 Carga Pedidos",  # <--- Nueva pestaña (Índice 7)
     ]
 elif perfil == "encargado":
     titulos_tabs = [
@@ -258,9 +261,9 @@ elif perfil == "encargado":
         "🌅 Mañana",
         "🌇 Tarde",
         "📊 Estadísticas",
+        "👥 Clientes",  # <--- También para el encargado si quieres que cargue pedidos
     ]
 else:
-    # Panadero/Operario
     titulos_tabs = ["📦 Stock/Pedidos", "📋 Plan Total", "🌅 Mañana", "🌇 Tarde"]
 
 tabs = st.tabs(titulos_tabs)
@@ -468,13 +471,23 @@ df_rpd_calc = pd.merge(edit_rpd, st.session_state.df_ajustes, on="Masa Base")
 
 
 def logica_t(row):
-    s = row["Stock Actual"]
-    if s <= row["Tope 1 (Crítico)"]:
-        return row["Producir 1"]
-    if s <= row["Tope 2 (Medio)"]:
-        return row["Producir 2"]
-    if s <= row["Tope 3 (Alto)"]:
-        return row["Producir 3"]
+    s = row.get("Stock Actual", 0)
+
+    # Usamos .get() para evitar el KeyError si la columna falta o cambia de nombre
+    t1 = row.get("Tope 1 (Crítico)", row.get("Tope 1 (Critico)", 0))
+    t2 = row.get("Tope 2 (Medio)", row.get("Tope 2 (Medio)", 0))
+    t3 = row.get("Tope 3 (Alto)", row.get("Tope 3 (Alto)", 0))
+
+    p1 = row.get("Producir 1", 0)
+    p2 = row.get("Producir 2", 0)
+    p3 = row.get("Producir 3", 0)
+
+    if s <= t1:
+        return p1
+    if s <= t2:
+        return p2
+    if s <= t3:
+        return p3
     return 0
 
 
@@ -858,7 +871,287 @@ if perfil == "admin":
         if st.button(
             "💾 Guardar Cambios Maestros", type="primary", use_container_width=True
         ):
-            from src.utils import guardar_ajustes
+            from src.config_manager import guardar_ajustes
 
             guardar_ajustes(edit_m)
             st.success("Ajustes actualizados.")
+
+# ========================================================
+# PESTAÑA 6: GESTIÓN DE CLIENTES (Bloque Corregido)
+# ========================================================
+if perfil in ["admin", "encargado"]:
+    try:
+        idx_clientes = titulos_tabs.index("👥 Clientes")
+        with tabs[idx_clientes]:
+            st.header("👥 Directorio de Clientes")
+
+            ruta_clientes = "data/clientes.csv"
+
+            # --- Formulario de Alta Totalmente Automático ---
+            with st.expander("➕ Registrar Nuevo Cliente", expanded=False):
+                with st.form("form_nuevo_cliente"):
+                    st.info("El ID de cliente se generará automáticamente al guardar.")
+
+                    nombre_cliente = st.text_input(
+                        "Nombre / Razón Social (Ej: Hotel Central):"
+                    )
+
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        contacto = st.text_input("Teléfono / Contacto:")
+                    with c2:
+                        zona = st.selectbox(
+                            "Zona de Entrega:",
+                            [
+                                "Norte",
+                                "Sur",
+                                "Este",
+                                "Oeste",
+                                "Centro",
+                                "Retira en Planta",
+                            ],
+                        )
+
+                    btn_guardar = st.form_submit_button(
+                        "Guardar Cliente", use_container_width=True
+                    )
+
+                    if btn_guardar:
+                        if nombre_cliente:
+                            # --- Lógica de ID Automático (Interna) ---
+                            if os.path.exists(ruta_clientes):
+                                df_c = pd.read_csv(ruta_clientes)
+                                if not df_c.empty:
+                                    # Aseguramos que el ID sea tratado como entero para sumar
+                                    nuevo_id = int(df_c["ID"].max()) + 1
+                                else:
+                                    nuevo_id = 1001
+                            else:
+                                df_c = pd.DataFrame(
+                                    columns=[
+                                        "ID",
+                                        "Nombre",
+                                        "Contacto",
+                                        "Zona",
+                                        "Fecha_Alta",
+                                    ]
+                                )
+                                nuevo_id = 1001
+
+                            # Crear el registro
+                            nuevo_c = pd.DataFrame(
+                                [
+                                    {
+                                        "ID": nuevo_id,
+                                        "Nombre": nombre_cliente,
+                                        "Contacto": contacto,
+                                        "Zona": zona,
+                                        "Fecha_Alta": datetime.now().strftime(
+                                            "%Y-%m-%d"
+                                        ),
+                                    }
+                                ]
+                            )
+
+                            df_c = pd.concat([df_c, nuevo_c], ignore_index=True)
+                            df_c.to_csv(ruta_clientes, index=False)
+                            st.success(
+                                f"✅ Cliente registrado con éxito. ID Asignado: {nuevo_id}"
+                            )
+                            st.rerun()
+                        else:
+                            st.warning("⚠️ El nombre del cliente es obligatorio.")
+
+            # --- Visualización y Edición ---
+            if os.path.exists(ruta_clientes):
+                df_c = pd.read_csv(ruta_clientes)
+                st.subheader("Lista de Clientes Activos")
+
+                # Aquí el ID está bloqueado para edición (disabled)
+                df_c_edit = st.data_editor(
+                    df_c,
+                    num_rows="dynamic",
+                    key="editor_clientes_vFinal",
+                    use_container_width=True,
+                    hide_index=True,
+                    disabled=["ID", "Fecha_Alta"],
+                )
+
+                if st.button("💾 Guardar Cambios en la Lista"):
+                    df_c_edit.to_csv(ruta_clientes, index=False)
+                    st.success("Cambios guardados.")
+                    st.rerun()
+            else:
+                st.info("Aún no hay clientes registrados.")
+    except ValueError:
+        pass
+# ========================================================
+# PESTAÑA 7: CARGA DE PEDIDOS (Formulario Dinámico por Unidades)
+# ========================================================
+if perfil in ["admin", "encargado"]:
+    try:
+        idx_pedidos = titulos_tabs.index("📝 Carga Pedidos")
+        with tabs[idx_pedidos]:
+            st.header("📝 Registro de Pedidos (Unidades)")
+
+            ruta_pedidos = "data/pedidos.csv"
+            ruta_clientes = "data/clientes.csv"
+
+            # 1. Cargar base de datos de Clientes
+            lista_clientes = []
+            if os.path.exists(ruta_clientes):
+                df_c = pd.read_csv(ruta_clientes)
+                lista_clientes = [
+                    f"{row['ID']} - {row['Nombre']}" for _, row in df_c.iterrows()
+                ]
+
+            # 2. Cargar base de datos de Productos (Priorizando Session State)
+            if "df_ajustes" in st.session_state:
+                lista_productos = (
+                    st.session_state.df_ajustes["Masa Base"].unique().tolist()
+                )
+            elif os.path.exists("data/ajustes_produccion.json"):
+                df_temp = pd.read_json("data/ajustes_produccion.json")
+                lista_productos = df_temp["Masa Base"].unique().tolist()
+            else:
+                lista_productos = df_base["Masa Base"].unique().tolist()
+
+            if not lista_clientes:
+                st.warning("⚠️ Registra clientes antes de cargar pedidos.")
+            elif not lista_productos:
+                st.error(
+                    "⚠️ No se encontró la tabla de Ajustes Maestros para referenciar productos."
+                )
+            else:
+                # --- FORMULARIO PRÁCTICO ---
+                with st.expander("🆕 Generar Nuevo Pedido", expanded=True):
+                    # Encabezado fijo del pedido
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        cliente_sel = st.selectbox(
+                            "Seleccionar Cliente:", lista_clientes
+                        )
+                    with c2:
+                        fecha_entrega = st.date_input(
+                            "Fecha de Entrega:", datetime.now() + timedelta(days=1)
+                        )
+
+                    obs_general = st.text_input("Observaciones generales del pedido:")
+
+                    st.write("### Detalle de Productos")
+                    st.info(
+                        "Haz clic en '+' para agregar filas o presiona 'Supr' para borrar."
+                    )
+
+                    # Inicializamos un DataFrame vacío en sesión para el editor si no existe
+                    if "df_pedido_temp" not in st.session_state:
+                        st.session_state.df_pedido_temp = pd.DataFrame(
+                            [{"Producto": lista_productos[0], "Unidades": 1}],
+                            columns=["Producto", "Unidades"],
+                        )
+
+                    # EDITOR DINÁMICO (La "Tabla" de carga)
+                    df_editor = st.data_editor(
+                        st.session_state.df_pedido_temp,
+                        column_config={
+                            "Producto": st.column_config.SelectboxColumn(
+                                "Producto",
+                                options=lista_productos,
+                                required=True,
+                                width="large",
+                            ),
+                            "Unidades": st.column_config.NumberColumn(
+                                "Unidades",
+                                min_value=1,
+                                step=1,
+                                format="%d",
+                                required=True,
+                            ),
+                        },
+                        num_rows="dynamic",
+                        use_container_width=True,
+                        hide_index=True,
+                        key="editor_pedidos_v2",
+                    )
+
+                    if st.button(
+                        "🚀 Confirmar y Guardar Pedido Completo",
+                        use_container_width=True,
+                        type="primary",
+                    ):
+                        # Generamos un ID de grupo único para este pedido (timestamp)
+                        id_grupo = int(datetime.now().timestamp())
+                        id_cli = cliente_sel.split(" - ")[0]
+                        nom_cli = cliente_sel.split(" - ")[1]
+                        fecha_reg = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+                        # Convertimos las filas del editor en el formato del CSV
+                        nuevos_registros = []
+                        for _, fila in df_editor.iterrows():
+                            nuevos_registros.append(
+                                {
+                                    "ID_Pedido": id_grupo,
+                                    "ID_Cliente": id_cli,
+                                    "Cliente": nom_cli,
+                                    "Producto": fila["Producto"],
+                                    "Unidades": int(fila["Unidades"]),
+                                    "Fecha_Entrega": fecha_entrega.strftime("%Y-%m-%d"),
+                                    "Estado": "Pendiente",
+                                    "Fecha_Registro": fecha_reg,
+                                    "Obs": obs_general,
+                                }
+                            )
+
+                        df_nuevos = pd.DataFrame(nuevos_registros)
+
+                        # Persistencia en CSV
+                        if os.path.exists(ruta_pedidos):
+                            df_hist = pd.read_csv(ruta_pedidos)
+                            df_final = pd.concat(
+                                [df_hist, df_nuevos], ignore_index=True
+                            )
+                        else:
+                            df_final = df_nuevos
+
+                        df_final.to_csv(ruta_pedidos, index=False)
+
+                        # Limpiamos sesión y refrescamos
+                        if "df_pedido_temp" in st.session_state:
+                            del st.session_state.df_pedido_temp
+
+                        st.success(
+                            f"✅ Pedido de {len(nuevos_registros)} ítems guardado para {nom_cli}."
+                        )
+                        time.sleep(1)
+                        st.rerun()
+
+                # --- Visualización de Pedidos Activos ---
+                if os.path.exists(ruta_pedidos):
+                    st.divider()
+                    st.subheader("📋 Pedidos Programados")
+                    df_p = pd.read_csv(ruta_pedidos)
+
+                    # Filtramos por pendientes y ordenamos por fecha
+                    df_pendientes = df_p[df_p["Estado"] == "Pendiente"].sort_values(
+                        by=["Fecha_Entrega", "ID_Pedido"], ascending=[True, False]
+                    )
+
+                    if not df_pendientes.empty:
+                        st.dataframe(
+                            df_pendientes[
+                                [
+                                    "Fecha_Entrega",
+                                    "Cliente",
+                                    "Producto",
+                                    "Unidades",
+                                    "Obs",
+                                ]
+                            ],
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+                    else:
+                        st.info("No hay pedidos pendientes programados.")
+
+    except ValueError:
+        pass

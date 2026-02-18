@@ -858,6 +858,29 @@ if perfil in ["admin", "encargado"]:
 # ========================================================
 # PESTAÑA 5: AJUSTES MAESTROS (Solo Admin)
 # ========================================================
+
+# --- BLOQUE TEMPORAL PARA CARGAR CSV ---
+st.info("📂 Importar Ajustes desde CSV")
+archivo_subido = st.file_uploader("Sube el archivo .csv que descargaste", type="csv")
+
+if archivo_subido is not None:
+    if st.button("🚀 Aplicar datos del CSV a Ajustes Maestros"):
+        df_subido = pd.read_csv(archivo_subido)
+
+        # Guardamos lo que subiste en la memoria del sistema
+        st.session_state.df_ajustes = df_subido
+
+        # También lo guardamos en el archivo permanente para que no se borre
+        st.session_state.df_ajustes.to_json(
+            "data/ajustes_produccion.json", orient="records", indent=4
+        )
+
+        st.success(
+            "✅ Ajustes actualizados desde el CSV. ¡Ya puedes borrar este bloque de código!"
+        )
+        st.rerun()
+# ---------------------------------------
+
 if perfil == "admin":
     with tabs[5]:
         st.header("⚙️ Configuración Maestra")

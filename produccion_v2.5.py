@@ -1207,25 +1207,127 @@ if perfil in ["admin", "encargado"]:
                     st.subheader("📋 Pedidos Programados")
                     df_p = pd.read_csv(ruta_pedidos)
 
+                    # Asegurar que la columna 'Estado' existe, si no asignar 'Pendiente' por defecto
+                    if "Estado" not in df_p.columns:
+                        df_p["Estado"] = "Pendiente"
+                    
                     # Filtramos por pendientes y ordenamos por fecha
-                    df_pendientes = df_p[df_p["Estado"] == "Pendiente"].sort_values(
-                        by=["Fecha_Entrega", "ID_Pedido"], ascending=[True, False]
-                    )
+                    df_pendientes = df_p[df_p["Estado"] == "Pendiente"].copy()
 
                     if not df_pendientes.empty:
-                        st.dataframe(
-                            df_pendientes[
-                                [
-                                    "Fecha_Entrega",
-                                    "Cliente",
-                                    "Producto",
-                                    "Unidades",
-                                    "Obs",
-                                ]
-                            ],
+                        # Agrupar por ID_Pedido y crear vista resumida
+                        df_resumen = df_pendientes.groupby("ID_Pedido").agg({
+                            "Cliente": "first",  # Tomar el primer valor encontrado
+                            "Fecha_Entrega": "first",
+                            "Fecha_Registro": "first",
+                            "Estado": "first",
+                        }).reset_index()
+                        
+                        # Renombrar columnas según requerimientos
+                        df_resumen = df_resumen.rename(columns={
+                            "ID_Pedido": "Nro. Pedido",
+                            "Fecha_Registro": "Fecha ingreso",
+                            "Fecha_Entrega": "Fecha entrega",
+                        })
+                        
+                        # Agregar columna 'Despacho' vacía
+                        df_resumen["Despacho"] = ""
+                        
+                        # Reordenar columnas según especificación
+                        df_resumen = df_resumen[[
+                            "Nro. Pedido",
+                            "Fecha ingreso",
+                            "Cliente",
+                            "Fecha entrega",
+                            "Despacho",
+                            "Estado"
+                        ]]
+                        
+                        # Ordenar por fecha de entrega y número de pedido
+                        df_resumen = df_resumen.sort_values(
+                            by=["Fecha entrega", "Nro. Pedido"], 
+                            ascending=[True, False]
+                        )
+                        
+                        # Mostrar tabla resumida con selección de filas habilitada
+                        seleccion_tabla = st.dataframe(
+                            df_resumen,
                             use_container_width=True,
                             hide_index=True,
+                            on_select='rerun',
+                            selection_mode='single-row',
+                            key="tabla_pedidos_resumen"
                         )
+                        
+                        # Obtener el pedido seleccionado de la tabla
+                        pedido_seleccionado = None
+                        if seleccion_tabla.selection.rows:
+                            # Obtener el índice de la fila seleccionada
+                            indice_seleccionado = seleccion_tabla.selection.rows[0]
+                            if indice_seleccionado < len(df_resumen):
+                                pedido_seleccionado = df_resumen.iloc[indice_seleccionado]["Nro. Pedido"]
+                        
+                        # Sección para ver detalles de pedidos específicos
+                        st.subheader("🔍 Ver Detalle de Pedidos")
+                        
+                        # Inicializar estado de visualización si no existe
+                        if "mostrar_detalle_pedido" not in st.session_state:
+                            st.session_state.mostrar_detalle_pedido = False
+                            st.session_state.pedido_detalle_activo = None
+                        
+                        # Si cambió la selección, ocultar el detalle anterior
+                        if (st.session_state.get("pedido_detalle_activo") is not None and 
+                            st.session_state.get("pedido_detalle_activo") != pedido_seleccionado):
+                            st.session_state.mostrar_detalle_pedido = False
+                        
+                        # Mostrar botón o mensaje según la selección
+                        if pedido_seleccionado is not None:
+                            # Botón para mostrar el detalle del pedido seleccionado
+                            if st.button(
+                                f"🔎 Ver Detalle del Pedido #{pedido_seleccionado}",
+                                use_container_width=True,
+                                type="primary",
+                                key="btn_ver_detalle"
+                            ):
+                                # Activar visualización del detalle
+                                st.session_state.mostrar_detalle_pedido = True
+                                st.session_state.pedido_detalle_activo = pedido_seleccionado
+                            
+                            # Mostrar el detalle si está activado y corresponde al pedido seleccionado
+                            if (st.session_state.get("mostrar_detalle_pedido", False) and 
+                                st.session_state.get("pedido_detalle_activo") == pedido_seleccionado):
+                                detalle_pedido = df_pendientes[
+                                    df_pendientes["ID_Pedido"] == pedido_seleccionado
+                                ][["Producto", "Unidades", "Obs"]].copy()
+                                
+                                if not detalle_pedido.empty:
+                                    with st.expander(
+                                        f"📦 Detalle del Pedido #{pedido_seleccionado}",
+                                        expanded=True
+                                    ):
+                                        st.dataframe(
+                                            detalle_pedido,
+                                            use_container_width=True,
+                                            hide_index=True,
+                                        )
+                                        # Mostrar información adicional del pedido
+                                        info_pedido = df_pendientes[
+                                            df_pendientes["ID_Pedido"] == pedido_seleccionado
+                                        ].iloc[0]
+                                        
+                                        col1, col2 = st.columns(2)
+                                        with col1:
+                                            st.write(f"**Cliente:** {info_pedido['Cliente']}")
+                                            st.write(f"**Fecha de Entrega:** {info_pedido['Fecha_Entrega']}")
+                                        with col2:
+                                            st.write(f"**Fecha de Registro:** {info_pedido['Fecha_Registro']}")
+                                            st.write(f"**Estado:** {info_pedido['Estado']}")
+                                        
+                                        if pd.notna(info_pedido.get("Obs")) and str(info_pedido.get("Obs")).strip():
+                                            st.write(f"**Observaciones:** {info_pedido['Obs']}")
+                        else:
+                            # Mensaje informativo cuando no hay selección
+                            st.info("Seleccione un pedido de la tabla para ver su detalle.")
                     else:
                         st.info("No hay pedidos pendientes programados.")
 

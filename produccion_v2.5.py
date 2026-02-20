@@ -900,31 +900,6 @@ if perfil in ["admin", "encargado"]:
 # PESTAÑA 5: AJUSTES MAESTROS (Solo Admin)
 # ========================================================
 
-# --- BLOQUE TEMPORAL PARA CARGAR CSV ---
-st.info("📂 Importar Ajustes desde CSV")
-archivo_subido = st.file_uploader("Sube el archivo .csv que descargaste", type="csv")
-
-if archivo_subido is not None:
-    if st.button("🚀 Aplicar datos del CSV a Ajustes Maestros"):
-        df_subido = pd.read_csv(archivo_subido)
-        # Limpiar espacios en "Masa Base" para evitar errores de sincronización
-        if "Masa Base" in df_subido.columns:
-            df_subido["Masa Base"] = df_subido["Masa Base"].astype(str).str.strip()
-
-        # Guardamos lo que subiste en la memoria del sistema
-        st.session_state.df_ajustes = df_subido
-
-        # También lo guardamos en el archivo permanente para que no se borre
-        st.session_state.df_ajustes.to_json(
-            "data/ajustes_produccion.json", orient="records", indent=4
-        )
-
-        st.success(
-            "✅ Ajustes actualizados desde el CSV. ¡Ya puedes borrar este bloque de código!"
-        )
-        st.rerun()
-# ---------------------------------------
-
 if perfil == "admin":
     with tabs[5]:
         st.header("⚙️ Configuración Maestra")
@@ -940,8 +915,42 @@ if perfil == "admin":
         ):
             from src.config_manager import guardar_ajustes
 
+            # Guardar en archivo permanente
             guardar_ajustes(edit_m)
+            
+            # Actualizar session_state para mantener sincronización con otras pestañas
+            # Asegurar limpieza de espacios en "Masa Base"
+            edit_m_clean = edit_m.copy()
+            if "Masa Base" in edit_m_clean.columns:
+                edit_m_clean["Masa Base"] = edit_m_clean["Masa Base"].astype(str).str.strip()
+            st.session_state.df_ajustes = edit_m_clean
+            
             st.success("Ajustes actualizados.")
+        
+        st.divider()
+        
+        # --- IMPORTAR AJUSTES DESDE CSV ---
+        with st.expander("📂 Importar Ajustes desde CSV", expanded=False):
+            st.info("Sube un archivo CSV con los ajustes para actualizar la configuración maestra.")
+            archivo_subido = st.file_uploader("Sube el archivo .csv que descargaste", type="csv")
+
+            if archivo_subido is not None:
+                if st.button("🚀 Aplicar datos del CSV a Ajustes Maestros"):
+                    df_subido = pd.read_csv(archivo_subido)
+                    # Limpiar espacios en "Masa Base" para evitar errores de sincronización
+                    if "Masa Base" in df_subido.columns:
+                        df_subido["Masa Base"] = df_subido["Masa Base"].astype(str).str.strip()
+
+                    # Guardamos lo que subiste en la memoria del sistema
+                    st.session_state.df_ajustes = df_subido
+
+                    # También lo guardamos en el archivo permanente para que no se borre
+                    st.session_state.df_ajustes.to_json(
+                        "data/ajustes_produccion.json", orient="records", indent=4
+                    )
+
+                    st.success("✅ Ajustes actualizados desde el CSV.")
+                    st.rerun()
 
 # ========================================================
 # PESTAÑA 6: GESTIÓN DE CLIENTES (Bloque Corregido)

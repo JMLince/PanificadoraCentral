@@ -9,7 +9,11 @@ ARCHIVO_AJUSTES = "data/ajustes_produccion.json"
 def cargar_ajustes():
     if os.path.exists(ARCHIVO_AJUSTES):
         with open(ARCHIVO_AJUSTES, "r") as f:
-            return pd.DataFrame(json.load(f))
+            df = pd.DataFrame(json.load(f))
+            # Limpiar espacios en "Masa Base" para evitar errores de sincronización
+            if "Masa Base" in df.columns:
+                df["Masa Base"] = df["Masa Base"].astype(str).str.strip()
+            return df
     else:
         df_defecto = pd.DataFrame(
             {

@@ -55,6 +55,9 @@ st.markdown(
 # --- CARGA DE DATOS ---
 if "df_ajustes" not in st.session_state:
     st.session_state.df_ajustes = cargar_ajustes()
+    # Asegurar limpieza de espacios en "Masa Base" al cargar
+    if "Masa Base" in st.session_state.df_ajustes.columns:
+        st.session_state.df_ajustes["Masa Base"] = st.session_state.df_ajustes["Masa Base"].astype(str).str.strip()
 
 datos_tecnicos = {
     "Masa Base": [
@@ -167,6 +170,8 @@ datos_tecnicos = {
     ],
 }
 df_base = pd.DataFrame(datos_tecnicos)
+# Limpiar espacios en "Masa Base" desde el inicio para evitar errores de sincronización
+df_base["Masa Base"] = df_base["Masa Base"].astype(str).str.strip()
 
 st.title(f"🍞 Gestión de Producción y Stock v2.5 PRO")
 
@@ -311,9 +316,13 @@ with tabs[0]:
     with col_rpd:
         st.subheader("Stock RPD")
         df_rpd_in = st.session_state.df_ajustes[["Masa Base"]].copy()
+        # Limpiar espacios en "Masa Base" para evitar errores de sincronización
+        df_rpd_in["Masa Base"] = df_rpd_in["Masa Base"].astype(str).str.strip()
 
         if ya_cargado and df_valores_previos is not None:
-            rpd_saved = df_valores_previos[df_valores_previos["Origen"] == "RPD"]
+            rpd_saved = df_valores_previos[df_valores_previos["Origen"] == "RPD"].copy()
+            # Limpiar espacios en "Producto" antes del merge
+            rpd_saved["Producto"] = rpd_saved["Producto"].astype(str).str.strip()
             df_rpd_in = df_rpd_in.merge(
                 rpd_saved[["Producto", "Cantidad"]],
                 left_on="Masa Base",
@@ -376,11 +385,16 @@ with tabs[0]:
             ("SALVADO FRESH", "SALVADO FETEADO FRESH"),
         ]
         df_pa_in = pd.DataFrame(prod_pa, columns=["Masa Base", "Producto"])
+        # Limpiar espacios en "Masa Base" y "Producto" para evitar errores de sincronización
+        df_pa_in["Masa Base"] = df_pa_in["Masa Base"].astype(str).str.strip()
+        df_pa_in["Producto"] = df_pa_in["Producto"].astype(str).str.strip()
 
         # --- LÓGICA DE CARGA BLINDADA (STOCK + DEMANDA) ---
         if ya_cargado and df_valores_previos is not None:
             # 1. Filtramos solo los registros de PA del historial
             pa_saved = df_valores_previos[df_valores_previos["Origen"] == "PA"].copy()
+            # Limpiar espacios en "Producto" antes del merge
+            pa_saved["Producto"] = pa_saved["Producto"].astype(str).str.strip()
 
             # 2. Unimos por Producto trayendo Cantidad (Stock) y Demanda
             # Nota: Usamos los nombres de columna tal cual están en tu CSV de historial
@@ -467,7 +481,24 @@ with tabs[0]:
 # MOTOR DE CÁLCULO (Se ejecuta siempre antes de las pestañas de producción)
 # ========================================================
 factor = (1 + (p_inc / 100)) if datetime.now().strftime("%A") in dias_esp else 1.0
-df_rpd_calc = pd.merge(edit_rpd, st.session_state.df_ajustes, on="Masa Base")
+
+# --- LIMPIEZA Y SINCRONIZACIÓN DE DATOS ---
+# Aplicar strip() a "Masa Base" para evitar errores con espacios (ej: 'BLANCO LARGO')
+edit_rpd_clean = edit_rpd.copy()
+edit_rpd_clean["Masa Base"] = edit_rpd_clean["Masa Base"].astype(str).str.strip()
+
+df_ajustes_clean = st.session_state.df_ajustes.copy()
+df_ajustes_clean["Masa Base"] = df_ajustes_clean["Masa Base"].astype(str).str.strip()
+
+# Merge evitando duplicación de columnas: solo traemos las columnas necesarias de df_ajustes
+# excluyendo "Masa Base" que ya está en edit_rpd_clean
+columnas_ajustes = [col for col in df_ajustes_clean.columns if col != "Masa Base"]
+df_rpd_calc = pd.merge(
+    edit_rpd_clean[["Masa Base", "Stock Actual"]],
+    df_ajustes_clean[["Masa Base"] + columnas_ajustes],
+    on="Masa Base",
+    how="inner"
+)
 
 
 def logica_t(row):
@@ -492,21 +523,31 @@ def logica_t(row):
 
 
 df_rpd_calc["Unidades"] = df_rpd_calc.apply(logica_t, axis=1)
+
+# Limpiar espacios en df_base antes del merge
+df_base_clean = df_base.copy()
+df_base_clean["Masa Base"] = df_base_clean["Masa Base"].astype(str).str.strip()
 df_rpd_calc = pd.merge(
-    df_rpd_calc, df_base[["Masa Base", "Cant_Batch"]], on="Masa Base"
+    df_rpd_calc, df_base_clean[["Masa Base", "Cant_Batch"]], on="Masa Base", how="left"
 )
 df_rpd_calc["Batches_RPD"] = (
     df_rpd_calc["Unidades"] / df_rpd_calc["Cant_Batch"]
 ) * factor
 
 edit_pa["Neto"] = (edit_pa["Demanda"] - edit_pa["Stock Inicial"]).clip(lower=0)
-pa_agrupado = edit_pa.groupby("Masa Base").agg({"Neto": "sum"}).reset_index()
+# Limpiar espacios en "Masa Base" antes de agrupar
+edit_pa_clean = edit_pa.copy()
+edit_pa_clean["Masa Base"] = edit_pa_clean["Masa Base"].astype(str).str.strip()
+pa_agrupado = edit_pa_clean.groupby("Masa Base").agg({"Neto": "sum"}).reset_index()
 pa_agrupado = pd.merge(
-    pa_agrupado, df_base[["Masa Base", "Cant_Batch"]], on="Masa Base", how="left"
+    pa_agrupado, df_base_clean[["Masa Base", "Cant_Batch"]], on="Masa Base", how="left"
 )
 pa_agrupado["Batches_PA"] = pa_agrupado["Neto"] / pa_agrupado["Cant_Batch"].fillna(1)
 
-df_final = df_base[["Masa Base", "Peso Corte", "Tapa"]].copy()
+df_final = df_base_clean[["Masa Base", "Peso Corte", "Tapa"]].copy()
+# Asegurar que df_rpd_calc y pa_agrupado también tienen "Masa Base" limpio
+df_rpd_calc["Masa Base"] = df_rpd_calc["Masa Base"].astype(str).str.strip()
+pa_agrupado["Masa Base"] = pa_agrupado["Masa Base"].astype(str).str.strip()
 df_final = pd.merge(
     df_final, df_rpd_calc[["Masa Base", "Batches_RPD"]], on="Masa Base", how="left"
 )
@@ -866,6 +907,9 @@ archivo_subido = st.file_uploader("Sube el archivo .csv que descargaste", type="
 if archivo_subido is not None:
     if st.button("🚀 Aplicar datos del CSV a Ajustes Maestros"):
         df_subido = pd.read_csv(archivo_subido)
+        # Limpiar espacios en "Masa Base" para evitar errores de sincronización
+        if "Masa Base" in df_subido.columns:
+            df_subido["Masa Base"] = df_subido["Masa Base"].astype(str).str.strip()
 
         # Guardamos lo que subiste en la memoria del sistema
         st.session_state.df_ajustes = df_subido

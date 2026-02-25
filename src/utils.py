@@ -208,3 +208,55 @@ def reservar_pedido(pedido_id, ruta_archivo="data/pedidos.csv"):
 
     except Exception as e:
         return False, f"Error al reservar pedido: {str(e)}"
+
+
+def anular_pedido(pedido_id, ruta_archivo="data/pedidos.csv"):
+    """
+    Cambia el estado de un pedido a 'Anulado' y lo persiste en el CSV.
+
+    Los pedidos anulados se mantienen en el archivo para historial pero no
+    aparecen en la vista de pedidos pendientes.
+
+    Args:
+        pedido_id (str o int): ID del pedido a anular
+        ruta_archivo (str): Ruta del archivo CSV de pedidos
+
+    Returns:
+        tuple: (exito: bool, mensaje: str)
+    """
+    pedido_id = str(pedido_id)
+
+    if not os.path.exists(ruta_archivo):
+        return False, f"Archivo de pedidos no encontrado: {ruta_archivo}"
+
+    try:
+        # Leer el CSV
+        df = pd.read_csv(ruta_archivo)
+
+        # Verificar que la columna Estado existe
+        if "Estado" not in df.columns:
+            return False, "La columna 'Estado' no existe en el archivo de pedidos"
+
+        # Convertir ID_Pedido a string para comparación
+        df["ID_Pedido"] = df["ID_Pedido"].astype(str)
+
+        # Buscar el pedido
+        mask = df["ID_Pedido"] == pedido_id
+        if not mask.any():
+            return False, f"Pedido #{pedido_id} no encontrado"
+
+        # Obtener estado actual
+        estado_actual = df[mask]["Estado"].iloc[0]
+        if estado_actual == "Anulado":
+            return False, f"Pedido #{pedido_id} ya estaba anulado"
+
+        # Cambiar estado a "Anulado"
+        df.loc[mask, "Estado"] = "Anulado"
+
+        # Guardar en el archivo
+        df.to_csv(ruta_archivo, index=False, encoding="utf-8")
+
+        return True, f"Pedido #{pedido_id} anulado con éxito"
+
+    except Exception as e:
+        return False, f"Error al anular pedido: {str(e)}"

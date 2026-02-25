@@ -8,7 +8,12 @@ from datetime import datetime, timedelta
 # st.cache_data.clear() -- comentada para prueba con carga aj. maestros
 
 # IMPORTACIONES MODULARES DESDE TU CARPETA SRC
-from src.utils import aplicar_redondeo, guardar_en_historial, reservar_pedido
+from src.utils import (
+    aplicar_redondeo,
+    guardar_en_historial,
+    reservar_pedido,
+    anular_pedido,
+)
 from src.config_manager import cargar_ajustes, guardar_ajustes
 from src.auth import generar_login
 from src.report_generator import generar_pdf_produccion, exportar_pedido_pdf
@@ -903,6 +908,102 @@ if perfil in ["admin", "encargado"]:
                     "No existen datos de stock para mostrar según fechas seleccionadas."
                 )
 
+        st.divider()
+
+        # --- SECCIÓN 3: HISTORIAL DE PEDIDOS ANULADOS ---
+        st.subheader("🗑️ Historial de Pedidos Anulados")
+
+        ruta_pedidos = "data/pedidos.csv"
+        if os.path.exists(ruta_pedidos):
+            df_pedidos = pd.read_csv(ruta_pedidos)
+
+            # Filtrar solo pedidos anulados
+            df_anulados = df_pedidos[df_pedidos["Estado"] == "Anulado"].copy()
+
+            if not df_anulados.empty:
+                # Preparar columnas para visualización
+                df_anulados["Fecha_Registro"] = pd.to_datetime(
+                    df_anulados["Fecha_Registro"], errors="coerce"
+                ).dt.strftime("%Y-%m-%d %H:%M")
+
+                # Seleccionar columnas de cabecera sin detalles de productos
+                df_auditoria_anulados = df_anulados[
+                    ["ID_Pedido", "Cliente", "Fecha_Registro", "Estado"]
+                ].copy()
+
+                # Eliminar duplicados por ID_Pedido para que solo aparezca una fila por pedido
+                df_auditoria_anulados = df_auditoria_anulados.drop_duplicates(
+                    subset=["ID_Pedido"], keep="first"
+                )
+
+                df_auditoria_anulados.columns = [
+                    "ID Pedido",
+                    "Cliente",
+                    "Fecha",
+                    "Estado",
+                ]
+
+                # Ordenar por fecha descendente
+                df_auditoria_anulados = df_auditoria_anulados.sort_values(
+                    by="Fecha", ascending=False
+                ).reset_index(drop=True)
+
+                # Mostrar en expander con estilos históricos
+                with st.expander(
+                    "📋 Ver Registro Histórico de Anulaciones", expanded=False
+                ):
+                    st.markdown(
+                        """
+                    <style>
+                    .historial-anulados {
+                        background-color: rgba(200, 200, 200, 0.1);
+                        border-left: 4px solid #FF6B6B;
+                        padding: 10px;
+                        border-radius: 5px;
+                        font-size: 0.9em;
+                    }
+                    </style>
+                    """,
+                        unsafe_allow_html=True,
+                    )
+
+                    st.info(
+                        "📌 Este registro contiene todos los pedidos anulados. "
+                        "Los datos se mantienen para auditoría y no afectan operaciones activas."
+                    )
+
+                    # Métrica de pedidos anulados (contar solo pedidos únicos)
+                    col_m1, col_m2 = st.columns(2)
+                    with col_m1:
+                        st.metric(
+                            "Pedidos Anulados (Únicos)", len(df_auditoria_anulados)
+                        )
+                    with col_m2:
+                        st.metric("Total de Ítems Anulados", len(df_anulados))
+
+                    # Tabla compacta con estilos históricos
+                    st.dataframe(
+                        df_auditoria_anulados,
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+                    # Opción de descarga
+                    csv_anulados = df_auditoria_anulados.to_csv(
+                        index=False, encoding="utf-8"
+                    )
+                    st.download_button(
+                        label="⬇️ Descargar Historial (CSV)",
+                        data=csv_anulados,
+                        file_name=f"pedidos_anulados_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                    )
+            else:
+                st.info("✅ No hay pedidos anulados registrados en el sistema.")
+        else:
+            st.warning("⚠️ El archivo de pedidos no se encontró.")
+
 # ========================================================
 # PESTAÑA 5: AJUSTES MAESTROS (Solo Admin)
 # ========================================================
@@ -1386,16 +1487,70 @@ if perfil in ["admin", "encargado"]:
 
                             # Botón 3: Anular
                             with col_anu:
+                                # Verificar si hay cancelación pendiente
+                                es_anulacion_pendiente = (
+                                    st.session_state.get("pedido_anular_confirmacion")
+                                    == pedido_id
+                                )
+
                                 if st.button(
                                     "❌ Anular",
                                     use_container_width=True,
-                                    disabled=not es_admin,
+                                    disabled=not es_admin or estado_actual == "Anulado",
                                     key=f"btn_anular_{pedido_id}",
                                 ):
                                     if es_admin:
-                                        st.warning(
-                                            f"Acción Anular para el pedido {pedido_id} en desarrollo"
+                                        # Establecer el pedido que aguarda confirmación
+                                        st.session_state.pedido_anular_confirmacion = (
+                                            pedido_id
                                         )
+                                        st.rerun()
+
+                                # Mostrar prompt de confirmación si está pendiente
+                                if es_anulacion_pendiente:
+                                    st.warning(
+                                        f"⚠️ **Confirmar anulación del pedido #{pedido_id}**\n\n"
+                                        "Esta acción NO se puede deshacer. El pedido se marcará "
+                                        "como 'Anulado' pero se mantendrá en el archivo para historial.",
+                                        icon="⚠️",
+                                    )
+
+                                    col_conf_si, col_conf_no = st.columns(2)
+
+                                    with col_conf_si:
+                                        if st.button(
+                                            "✅ Confirmar Anulación",
+                                            use_container_width=True,
+                                            key=f"btn_confirmar_anular_{pedido_id}",
+                                            type="primary",
+                                        ):
+                                            # Ejecutar la anulación
+                                            exito, mensaje = anular_pedido(pedido_id)
+
+                                            if exito:
+                                                st.success(f"✅ {mensaje}")
+                                                # Limpiar la confirmación pendiente
+                                                st.session_state.pedido_anular_confirmacion = (
+                                                    None
+                                                )
+                                                st.rerun()
+                                            else:
+                                                st.error(f"❌ {mensaje}")
+                                                st.session_state.pedido_anular_confirmacion = (
+                                                    None
+                                                )
+
+                                    with col_conf_no:
+                                        if st.button(
+                                            "❌ Cancelar",
+                                            use_container_width=True,
+                                            key=f"btn_cancelar_anular_{pedido_id}",
+                                        ):
+                                            # Cancelar la confirmación
+                                            st.session_state.pedido_anular_confirmacion = (
+                                                None
+                                            )
+                                            st.rerun()
 
                             # Botón 4: Reservar
                             with col_res:

@@ -1301,42 +1301,123 @@ if perfil in ["admin", "encargado"]:
                             st.session_state.mostrar_detalle_pedido = False
                             st.session_state.pedido_detalle_activo = None
 
-                        # Si cambió la selección, ocultar el detalle anterior
+                        # Si cambió la selección, resetear el estado del detalle
                         if (
-                            st.session_state.get("pedido_detalle_activo") is not None
+                            pedido_seleccionado is not None
                             and st.session_state.get("pedido_detalle_activo")
-                            != pedido_seleccionado
+                            is not None
+                            and str(st.session_state.get("pedido_detalle_activo"))
+                            != str(pedido_seleccionado)
                         ):
                             st.session_state.mostrar_detalle_pedido = False
+                            st.session_state.pedido_detalle_activo = None
 
-                        # Mostrar botón o mensaje según la selección
+                        # Mostrar botones o mensaje según la selección
                         if pedido_seleccionado is not None:
-                            # Botón para mostrar el detalle del pedido seleccionado
-                            if st.button(
-                                f"🔎 Ver Detalle del Pedido #{pedido_seleccionado}",
-                                use_container_width=True,
-                                type="primary",
-                                key="btn_ver_detalle",
-                            ):
-                                # Activar visualización del detalle
-                                st.session_state.mostrar_detalle_pedido = True
-                                st.session_state.pedido_detalle_activo = (
-                                    pedido_seleccionado
-                                )
+                            # Convertir a string para comparación uniforme
+                            pedido_id = str(pedido_seleccionado)
 
-                            # Mostrar el detalle si está activado y corresponde al pedido seleccionado
+                            # Obtener perfil del usuario actual
+                            perfil_usuario = (
+                                st.session_state.authenticator.get_user_profile()
+                            )
+                            es_admin = perfil_usuario == "admin"
+
+                            # --- BOTONES DE ACCIÓN (aparecen siempre, habilitados solo para admin) ---
+                            st.write("**Acciones disponibles:**")
+
+                            # Crear 5 columnas para los botones de acción
+                            col_mod, col_ver, col_anu, col_res, col_des = st.columns(5)
+
+                            # Botón 1: Modificar
+                            with col_mod:
+                                if st.button(
+                                    "✏️ Modificar",
+                                    use_container_width=True,
+                                    disabled=not es_admin,
+                                    key=f"btn_modificar_{pedido_id}",
+                                ):
+                                    if es_admin:
+                                        st.info(
+                                            f"Acción Modificar para el pedido {pedido_id} en desarrollo"
+                                        )
+
+                            # Botón 2: Ver detalle (toggle expander) - ÚNICO CONTROL DEL EXPANDER
+                            with col_ver:
+                                if st.button(
+                                    "👁️ Ver detalle",
+                                    use_container_width=True,
+                                    disabled=not es_admin,
+                                    key=f"btn_ver_det_{pedido_id}",
+                                ):
+                                    if es_admin:
+                                        # Establecer el pedido activo y hacer toggle
+                                        st.session_state.pedido_detalle_activo = (
+                                            pedido_id
+                                        )
+                                        st.session_state.mostrar_detalle_pedido = (
+                                            not st.session_state.get(
+                                                "mostrar_detalle_pedido", False
+                                            )
+                                        )
+                                        st.rerun()
+
+                            # Botón 3: Anular
+                            with col_anu:
+                                if st.button(
+                                    "❌ Anular",
+                                    use_container_width=True,
+                                    disabled=not es_admin,
+                                    key=f"btn_anular_{pedido_id}",
+                                ):
+                                    if es_admin:
+                                        st.warning(
+                                            f"Acción Anular para el pedido {pedido_id} en desarrollo"
+                                        )
+
+                            # Botón 4: Reservar
+                            with col_res:
+                                if st.button(
+                                    "🔒 Reservar",
+                                    use_container_width=True,
+                                    disabled=not es_admin,
+                                    key=f"btn_reservar_{pedido_id}",
+                                ):
+                                    if es_admin:
+                                        st.success(
+                                            f"Acción Reservar para el pedido {pedido_id} en desarrollo"
+                                        )
+
+                            # Botón 5: Descargar
+                            with col_des:
+                                if st.button(
+                                    "⬇️ Descargar",
+                                    use_container_width=True,
+                                    disabled=not es_admin,
+                                    key=f"btn_descargar_{pedido_id}",
+                                ):
+                                    if es_admin:
+                                        st.info(
+                                            f"Acción Descargar para el pedido {pedido_id} en desarrollo"
+                                        )
+
+                            st.divider()
+
+                            # Mostrar el detalle SOLO si está activado por el botón "Ver detalle"
                             if (
                                 st.session_state.get("mostrar_detalle_pedido", False)
-                                and st.session_state.get("pedido_detalle_activo")
-                                == pedido_seleccionado
+                                and str(
+                                    st.session_state.get("pedido_detalle_activo", "")
+                                )
+                                == pedido_id
                             ):
                                 detalle_pedido = df_pendientes[
-                                    df_pendientes["ID_Pedido"] == pedido_seleccionado
+                                    df_pendientes["ID_Pedido"].astype(str) == pedido_id
                                 ][["Producto", "Unidades", "Obs"]].copy()
 
                                 if not detalle_pedido.empty:
                                     with st.expander(
-                                        f"📦 Detalle del Pedido #{pedido_seleccionado}",
+                                        f"📦 Detalle del Pedido #{pedido_id}",
                                         expanded=True,
                                     ):
                                         st.dataframe(
@@ -1346,8 +1427,8 @@ if perfil in ["admin", "encargado"]:
                                         )
                                         # Mostrar información adicional del pedido
                                         info_pedido = df_pendientes[
-                                            df_pendientes["ID_Pedido"]
-                                            == pedido_seleccionado
+                                            df_pendientes["ID_Pedido"].astype(str)
+                                            == pedido_id
                                         ].iloc[0]
 
                                         col1, col2 = st.columns(2)

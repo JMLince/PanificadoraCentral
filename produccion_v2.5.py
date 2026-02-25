@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 # st.cache_data.clear() -- comentada para prueba con carga aj. maestros
 
 # IMPORTACIONES MODULARES DESDE TU CARPETA SRC
-from src.utils import aplicar_redondeo, guardar_en_historial
+from src.utils import aplicar_redondeo, guardar_en_historial, reservar_pedido
 from src.config_manager import cargar_ajustes, guardar_ajustes
 from src.auth import generar_login
 from src.report_generator import generar_pdf_produccion, exportar_pedido_pdf
@@ -1226,8 +1226,19 @@ if perfil in ["admin", "encargado"]:
                     if "Estado" not in df_p.columns:
                         df_p["Estado"] = "Pendiente"
 
-                    # Filtramos por pendientes y ordenamos por fecha
-                    df_pendientes = df_p[df_p["Estado"] == "Pendiente"].copy()
+                    # Filtramos por pendientes Y reservados
+                    df_pendientes = df_p[
+                        df_p["Estado"].isin(["Pendiente", "Reservado"])
+                    ].copy()
+
+                    # Ordenar: Reservados primero, luego Pendientes
+                    estado_order = {"Reservado": 0, "Pendiente": 1}
+                    df_pendientes["estado_sort"] = df_pendientes["Estado"].map(
+                        estado_order
+                    )
+                    df_pendientes = df_pendientes.sort_values(by="estado_sort").drop(
+                        "estado_sort", axis=1
+                    )
 
                     if not df_pendientes.empty:
                         # Agrupar por ID_Pedido y crear vista resumida
@@ -1317,6 +1328,17 @@ if perfil in ["admin", "encargado"]:
                             # Convertir a string para comparación uniforme
                             pedido_id = str(pedido_seleccionado)
 
+                            # Obtener estado actual del pedido
+                            estado_actual = (
+                                df_pendientes[
+                                    df_pendientes["ID_Pedido"].astype(str) == pedido_id
+                                ]["Estado"].iloc[0]
+                                if not df_pendientes[
+                                    df_pendientes["ID_Pedido"].astype(str) == pedido_id
+                                ].empty
+                                else "Desconocido"
+                            )
+
                             # Obtener perfil del usuario actual
                             perfil_usuario = (
                                 st.session_state.authenticator.get_user_profile()
@@ -1377,16 +1399,29 @@ if perfil in ["admin", "encargado"]:
 
                             # Botón 4: Reservar
                             with col_res:
+                                # Determinar etiqueta y estado del botón basado en estado actual
+                                es_ya_reservado = estado_actual == "Reservado"
+                                etiqueta_btn = (
+                                    "✓ Reservado" if es_ya_reservado else "🔒 Reservar"
+                                )
+                                btn_deshabilitado = not es_admin or es_ya_reservado
+
                                 if st.button(
-                                    "🔒 Reservar",
+                                    etiqueta_btn,
                                     use_container_width=True,
-                                    disabled=not es_admin,
+                                    disabled=btn_deshabilitado,
                                     key=f"btn_reservar_{pedido_id}",
                                 ):
-                                    if es_admin:
-                                        st.success(
-                                            f"Acción Reservar para el pedido {pedido_id} en desarrollo"
-                                        )
+                                    if es_admin and not es_ya_reservado:
+                                        # Ejecutar la lógica de reserva
+                                        exito, mensaje = reservar_pedido(pedido_id)
+
+                                        if exito:
+                                            st.success(f"✅ {mensaje}")
+                                            st.session_state["pedido_reservado"] = True
+                                            st.rerun()
+                                        else:
+                                            st.error(f"❌ {mensaje}")
 
                             # Botón 5: Descargar
                             with col_des:

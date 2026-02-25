@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from src.utils import aplicar_redondeo, guardar_en_historial
 from src.config_manager import cargar_ajustes, guardar_ajustes
 from src.auth import generar_login
-from src.report_generator import generar_pdf_produccion
+from src.report_generator import generar_pdf_produccion, exportar_pedido_pdf
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 # Debe ser lo primero que se ejecute
@@ -1397,8 +1397,31 @@ if perfil in ["admin", "encargado"]:
                                     key=f"btn_descargar_{pedido_id}",
                                 ):
                                     if es_admin:
-                                        st.info(
-                                            f"Acción Descargar para el pedido {pedido_id} en desarrollo"
+                                        # Obtener datos del pedido desde df_pendientes
+                                        detalle_pedido_data = df_pendientes[
+                                            df_pendientes["ID_Pedido"].astype(str)
+                                            == pedido_id
+                                        ][["Producto", "Unidades"]].copy()
+
+                                        info_pedido_data = df_pendientes[
+                                            df_pendientes["ID_Pedido"].astype(str)
+                                            == pedido_id
+                                        ].iloc[0]
+
+                                        # Generar PDF en memoria
+                                        pdf_bytes = exportar_pedido_pdf(
+                                            pedido_id=pedido_id,
+                                            detalle_productos=detalle_pedido_data,
+                                            info_cliente=info_pedido_data,
+                                        )
+
+                                        # Botón de descarga
+                                        st.download_button(
+                                            label="📥 Descargar PDF",
+                                            data=pdf_bytes,
+                                            file_name=f"Pedido_{pedido_id}_{datetime.now().strftime('%d%m%Y_%H%M%S')}.pdf",
+                                            mime="application/pdf",
+                                            key=f"download_pdf_{pedido_id}",
                                         )
 
                             st.divider()
@@ -1411,25 +1434,34 @@ if perfil in ["admin", "encargado"]:
                                 )
                                 == pedido_id
                             ):
+                                # Extraer datos del pedido
+                                info_pedido = df_pendientes[
+                                    df_pendientes["ID_Pedido"].astype(str) == pedido_id
+                                ].iloc[0]
+
+                                # Obtener observaciones una sola vez
+                                obs_general = (
+                                    str(info_pedido.get("Obs", "")).strip()
+                                    if pd.notna(info_pedido.get("Obs"))
+                                    else ""
+                                )
+
+                                # DataFrame solo con Producto y Unidades (sin Obs)
                                 detalle_pedido = df_pendientes[
                                     df_pendientes["ID_Pedido"].astype(str) == pedido_id
-                                ][["Producto", "Unidades", "Obs"]].copy()
+                                ][["Producto", "Unidades"]].copy()
 
                                 if not detalle_pedido.empty:
                                     with st.expander(
                                         f"📦 Detalle del Pedido #{pedido_id}",
                                         expanded=True,
                                     ):
+                                        # Mostrar tabla de productos (sin observaciones)
                                         st.dataframe(
                                             detalle_pedido,
                                             use_container_width=True,
                                             hide_index=True,
                                         )
-                                        # Mostrar información adicional del pedido
-                                        info_pedido = df_pendientes[
-                                            df_pendientes["ID_Pedido"].astype(str)
-                                            == pedido_id
-                                        ].iloc[0]
 
                                         col1, col2 = st.columns(2)
                                         with col1:
@@ -1447,12 +1479,10 @@ if perfil in ["admin", "encargado"]:
                                                 f"**Estado:** {info_pedido['Estado']}"
                                             )
 
-                                        if (
-                                            pd.notna(info_pedido.get("Obs"))
-                                            and str(info_pedido.get("Obs")).strip()
-                                        ):
-                                            st.write(
-                                                f"**Observaciones:** {info_pedido['Obs']}"
+                                        # Mostrar observaciones generales una sola vez
+                                        if obs_general:
+                                            st.info(
+                                                f"📝 **Observaciones Generales:** {obs_general}"
                                             )
                         else:
                             # Mensaje informativo cuando no hay selección

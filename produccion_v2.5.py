@@ -64,6 +64,19 @@ st.markdown(
     [data-testid="stDataFrameDataLayer"] [aria-colindex="1"] {
         opacity: 1 !important;
     }
+    /* Forzar visibilidad del botón "+" de añadir fila */
+    [data-testid="stDataFrameDynamicControls"] button {
+        opacity: 1 !important;
+        visibility: visible !important;
+        background-color: rgba(255, 255, 255, 0.1) !important; /* Un fondo suave para que resalte */
+    }
+    /* Forzar visibilidad de la papelera en las filas */
+    [data-testid="stDataFrameDataLayer"] button[title="Delete row"],
+    [data-testid="stDataFrameDataLayer"] button[aria-label="Delete row"] {
+        opacity: 1 !important;
+        visibility: visible !important;
+        color: #ff4b4b !important; /* Rojo para identificar borrado */
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -1298,28 +1311,41 @@ if perfil in ["admin", "encargado"]:
 
                     st.write("### Detalle de Productos")
                     st.info(
-                        "Haz clic en '+' para agregar filas. Para borrar, selecciona la fila y presiona 'Supr' o usa el icono de papelera al final."
+                        "Usa el botón + abajo a la derecha para sumar productos. Toca el tacho de basura rojo para quitar un ítem."
                     )
 
-                    # Inicializamos un DataFrame vacío en sesión para el editor si no existe
-                    if "df_pedido_temp" not in st.session_state:
-                        st.session_state.df_pedido_temp = pd.DataFrame(
-                            [{"Producto": lista_productos[0], "Unidades": 1}],
-                            columns=["Producto", "Unidades"],
-                        )
+                    # manejar lista de productos en session_state
+                    if "items_nuevo_pedido" not in st.session_state:
+                        st.session_state.items_nuevo_pedido = [
+                            {
+                                "Seleccionar": False,
+                                "Producto": lista_productos[0],
+                                "Unidades": 1,
+                            }
+                        ]
 
-                    # EDITOR DINÁMICO (La "Tabla" de carga)
-                    df_temp = st.session_state.df_pedido_temp
-                    # preparar configuraciones de columnas sin selección
+                    # convertir lista a DataFrame para editar, asegurando columna Seleccionar primero
+                    df_temp = pd.DataFrame(st.session_state.items_nuevo_pedido)
+                    if "Seleccionar" not in df_temp.columns:
+                        df_temp.insert(0, "Seleccionar", False)
+                    else:
+                        # mover Seleccionar a la primera posición
+                        cols = list(df_temp.columns)
+                        cols.insert(0, cols.pop(cols.index("Seleccionar")))
+                        df_temp = df_temp[cols]
+
+                    # configurar columnas editables
                     col_cfg = {}
-                    # Producto obligatorio como selectbox para evitar None
+                    col_cfg["Seleccionar"] = st.column_config.CheckboxColumn(
+                        "Seleccionar",
+                        help="Marcar fila para operaciones",
+                    )
                     col_cfg["Producto"] = st.column_config.SelectboxColumn(
                         "Producto",
                         options=lista_productos,
                         required=True,
                         width="large",
                     )
-                    # Unidades mínimo 1
                     col_cfg["Unidades"] = st.column_config.NumberColumn(
                         "Unidades",
                         min_value=1,
@@ -1331,12 +1357,51 @@ if perfil in ["admin", "encargado"]:
                     df_editor = st.data_editor(
                         df_temp,
                         column_config=col_cfg,
-                        num_rows="dynamic",
+                        num_rows="fixed",
                         disabled=False,
                         use_container_width=True,
                         hide_index=True,
                         key="editor_pedidos_v2",
                     )
+
+                    # sincronizar cambios manuales de la tabla de vuelta a la sesión
+                    if df_editor is not None:
+                        try:
+                            st.session_state.items_nuevo_pedido = df_editor.to_dict(
+                                orient="records"
+                            )
+                        except Exception:
+                            pass
+
+                    # botones de control fuera de la tabla (3 columnas para distribución equitativa)
+                    btn1, btn2, btn3 = st.columns([1, 1, 1])
+                    with btn1:
+                        if st.button(
+                            "➕ Agregar Producto",
+                            use_container_width=True,
+                            type="primary",
+                        ):
+                            st.session_state.items_nuevo_pedido.append(
+                                {
+                                    "Seleccionar": False,
+                                    "Producto": lista_productos[0],
+                                    "Unidades": 1,
+                                }
+                            )
+                            st.rerun()
+                    with btn2:
+                        if st.button(
+                            "🗑️ Borrar seleccionados", use_container_width=True
+                        ):
+                            # filtrar los que no están seleccionados
+                            df_now = pd.DataFrame(st.session_state.items_nuevo_pedido)
+                            if "Seleccionar" in df_now.columns:
+                                df_now = df_now[~df_now["Seleccionar"]]
+                            st.session_state.items_nuevo_pedido = df_now.to_dict(
+                                orient="records"
+                            )
+                            st.rerun()
+                    # columna 3 intencionalmente vacía para espaciado
 
                     if st.button(
                         "🚀 Confirmar y Guardar Pedido Completo",

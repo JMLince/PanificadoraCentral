@@ -1226,7 +1226,11 @@ if perfil in ["admin", "encargado"]:
     try:
         idx_pedidos = titulos_tabs.index("📝 Carga Pedidos")
         with tabs[idx_pedidos]:
-            st.header("📝 Registro de Pedidos (Unidades)")
+            # si estamos en modo edición de un pedido, ajustar encabezado
+            if "pedido_en_edicion" in st.session_state:
+                st.header("✏️ Modificar Pedido")
+            else:
+                st.header("📝 Registro de Pedidos (Unidades)")
 
             ruta_pedidos = "data/pedidos.csv"
             ruta_clientes = "data/clientes.csv"
@@ -1273,7 +1277,12 @@ if perfil in ["admin", "encargado"]:
                 """,
                     unsafe_allow_html=True,
                 )
-                with st.expander("🆕 Generar Nuevo Pedido", expanded=True):
+                # detectamos si estamos modificando un pedido previamente seleccionado
+                editing = "pedido_en_edicion" in st.session_state
+                exp_label = (
+                    "🔧 Modificar Pedido" if editing else "🆕 Generar Nuevo Pedido"
+                )
+                with st.expander(exp_label, expanded=True):
                     # Contenedor local para forzar CSS en este editor
                     with st.container():
                         st.markdown(
@@ -1296,18 +1305,48 @@ if perfil in ["admin", "encargado"]:
                     # Encabezado fijo del pedido
                     c1, c2 = st.columns(2)
                     with c1:
-                        cliente_sel = st.selectbox(
-                            "Seleccionar Cliente:", lista_clientes
-                        )
+                        if editing and "cliente_en_edicion" in st.session_state:
+                            default_cli = st.session_state.cliente_en_edicion
+                            default_idx = (
+                                lista_clientes.index(default_cli)
+                                if default_cli in lista_clientes
+                                else 0
+                            )
+                            cliente_sel = st.selectbox(
+                                "Seleccionar Cliente:",
+                                lista_clientes,
+                                index=default_idx,
+                                disabled=True,
+                            )
+                        else:
+                            cliente_sel = st.selectbox(
+                                "Seleccionar Cliente:", lista_clientes
+                            )
                     with c2:
-                        fecha_entrega = st.date_input(
-                            "Fecha de Entrega:",
-                            value=date.today() + timedelta(days=1),
-                            min_value=date.today(),
-                            help="Só se pueden seleccionar fechas de hoy en adelante. Por defecto, mañana para programación anticipated.",
-                        )
+                        if editing and "fecha_entrega_en_edicion" in st.session_state:
+                            fecha_entrega = st.date_input(
+                                "Fecha de Entrega:",
+                                value=st.session_state.fecha_entrega_en_edicion,
+                                min_value=date.today(),
+                                help="Só se pueden seleccionar fechas de hoy en adelante.",
+                            )
+                        else:
+                            fecha_entrega = st.date_input(
+                                "Fecha de Entrega:",
+                                value=date.today() + timedelta(days=1),
+                                min_value=date.today(),
+                                help="Só se pueden seleccionar fechas de hoy en adelante. Por defecto, mañana para programación anticipated.",
+                            )
 
-                    obs_general = st.text_input("Observaciones generales del pedido:")
+                    if editing and "obs_en_edicion" in st.session_state:
+                        obs_general = st.text_input(
+                            "Observaciones generales del pedido:",
+                            value=st.session_state.obs_en_edicion,
+                        )
+                    else:
+                        obs_general = st.text_input(
+                            "Observaciones generales del pedido:"
+                        )
 
                     st.write("### Detalle de Productos")
                     st.info(
@@ -1315,14 +1354,51 @@ if perfil in ["admin", "encargado"]:
                     )
 
                     # manejar lista de productos en session_state
-                    if "items_nuevo_pedido" not in st.session_state:
-                        st.session_state.items_nuevo_pedido = [
-                            {
-                                "Seleccionar": False,
-                                "Producto": lista_productos[0],
-                                "Unidades": 1,
-                            }
-                        ]
+                    if not editing:
+                        if "items_nuevo_pedido" not in st.session_state:
+                            st.session_state.items_nuevo_pedido = [
+                                {
+                                    "Seleccionar": False,
+                                    "Producto": lista_productos[0],
+                                    "Unidades": 1,
+                                }
+                            ]
+                    else:
+                        # si se perdió la lista por alguna recarga, intentar reconstruirla
+                        if "items_nuevo_pedido" not in st.session_state:
+                            if os.path.exists(ruta_pedidos):
+                                df_tmp = pd.read_csv(ruta_pedidos)
+                                df_this = df_tmp[
+                                    df_tmp["ID_Pedido"].astype(str)
+                                    == str(st.session_state.pedido_en_edicion)
+                                ]
+                                if not df_this.empty:
+                                    items = []
+                                    for _, r in df_this.iterrows():
+                                        items.append(
+                                            {
+                                                "Seleccionar": False,
+                                                "Producto": r["Producto"],
+                                                "Unidades": r["Unidades"],
+                                            }
+                                        )
+                                    st.session_state.items_nuevo_pedido = items
+                                else:
+                                    st.session_state.items_nuevo_pedido = [
+                                        {
+                                            "Seleccionar": False,
+                                            "Producto": lista_productos[0],
+                                            "Unidades": 1,
+                                        }
+                                    ]
+                            else:
+                                st.session_state.items_nuevo_pedido = [
+                                    {
+                                        "Seleccionar": False,
+                                        "Producto": lista_productos[0],
+                                        "Unidades": 1,
+                                    }
+                                ]
 
                     # convertir lista a DataFrame para editar, asegurando columna Seleccionar primero
                     df_temp = pd.DataFrame(st.session_state.items_nuevo_pedido)
@@ -1456,8 +1532,32 @@ if perfil in ["admin", "encargado"]:
                             st.rerun()
                     # columna 3 intencionalmente vacía para espaciado
 
+                    # permitir cancelar edición si estamos modificando
+                    if editing and st.button(
+                        "❌ Cancelar edición",
+                        use_container_width=True,
+                        type="secondary",
+                    ):
+                        for key in [
+                            "pedido_en_edicion",
+                            "estado_en_edicion",
+                            "cliente_en_edicion",
+                            "fecha_entrega_en_edicion",
+                            "obs_en_edicion",
+                            "items_nuevo_pedido",
+                            "editor_nuevo_pedido",
+                        ]:
+                            if key in st.session_state:
+                                del st.session_state[key]
+                        st.rerun()
+
+                    save_label = (
+                        "💾 Guardar Cambios"
+                        if editing
+                        else "🚀 Confirmar y Guardar Pedido Completo"
+                    )
                     if st.button(
-                        "🚀 Confirmar y Guardar Pedido Completo",
+                        save_label,
                         use_container_width=True,
                         type="primary",
                     ):
@@ -1467,8 +1567,17 @@ if perfil in ["admin", "encargado"]:
                                 "❌ Error: La fecha de entrega no puede ser anterior a hoy. Por favor, selecciona una fecha válida."
                             )
                         else:
-                            # Generamos un ID de grupo único para este pedido (timestamp)
-                            id_grupo = int(datetime.now().timestamp())
+                            # determinar si estábamos editando un pedido existente
+                            editing = "pedido_en_edicion" in st.session_state
+                            # conservar el mismo ID en caso de edición, o generar nuevo
+                            if editing:
+                                id_grupo = st.session_state.pedido_en_edicion
+                                estado_para_guardar = st.session_state.get(
+                                    "estado_en_edicion", "Pendiente"
+                                )
+                            else:
+                                id_grupo = int(datetime.now().timestamp())
+                                estado_para_guardar = "Pendiente"
                             id_cli = cliente_sel.split(" - ")[0]
                             nom_cli = cliente_sel.split(" - ")[1]
                             fecha_reg = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -1497,7 +1606,7 @@ if perfil in ["admin", "encargado"]:
                                         "Fecha_Entrega": fecha_entrega.strftime(
                                             "%Y-%m-%d"
                                         ),
-                                        "Estado": "Pendiente",
+                                        "Estado": estado_para_guardar,
                                         "Fecha_Registro": fecha_reg,
                                         "Obs": obs_general,
                                     }
@@ -1508,6 +1617,12 @@ if perfil in ["admin", "encargado"]:
                             # Persistencia en CSV
                             if os.path.exists(ruta_pedidos):
                                 df_hist = pd.read_csv(ruta_pedidos)
+                                if editing:
+                                    # eliminamos las líneas antiguas del pedido para evitar duplicados
+                                    df_hist = df_hist[
+                                        df_hist["ID_Pedido"].astype(str)
+                                        != str(id_grupo)
+                                    ]
                                 df_final = pd.concat(
                                     [df_hist, df_nuevos], ignore_index=True
                                 )
@@ -1516,13 +1631,34 @@ if perfil in ["admin", "encargado"]:
 
                             df_final.to_csv(ruta_pedidos, index=False)
 
-                            # Limpiamos sesión y refrescamos
+                            # Limpiamos sesión y refrescamos; también quitar bandera de edición si existía
+                            if editing:
+                                for key in [
+                                    "pedido_en_edicion",
+                                    "estado_en_edicion",
+                                    "cliente_en_edicion",
+                                    "fecha_entrega_en_edicion",
+                                    "obs_en_edicion",
+                                ]:
+                                    if key in st.session_state:
+                                        del st.session_state[key]
+
                             if "df_pedido_temp" in st.session_state:
                                 del st.session_state.df_pedido_temp
 
-                            st.success(
-                                f"✅ Pedido de {len(nuevos_registros)} ítems guardado para {nom_cli}."
-                            )
+                            if "editor_nuevo_pedido" in st.session_state:
+                                del st.session_state["editor_nuevo_pedido"]
+                            if "items_nuevo_pedido" in st.session_state:
+                                del st.session_state["items_nuevo_pedido"]
+
+                            if editing:
+                                st.success(
+                                    f"✅ Pedido {id_grupo} modificado con {len(nuevos_registros)} ítems para {nom_cli}."
+                                )
+                            else:
+                                st.success(
+                                    f"✅ Pedido de {len(nuevos_registros)} ítems guardado para {nom_cli}."
+                                )
                             time.sleep(1)
                             st.rerun()
                 if os.path.exists(ruta_pedidos):
@@ -1618,12 +1754,18 @@ if perfil in ["admin", "encargado"]:
 
                         # Obtener el pedido seleccionado a partir del checkbox
                         pedido_seleccionado = None
+                        num_seleccionadas = 0
                         if not df_edit.empty and "Seleccionar" in df_edit.columns:
                             seleccionadas = df_edit[df_edit["Seleccionar"]]
-                            if not seleccionadas.empty:
+                            num_seleccionadas = len(seleccionadas)
+                            if num_seleccionadas == 1:
                                 pedido_seleccionado = seleccionadas.iloc[0][
                                     "Nro. Pedido"
                                 ]
+                            elif num_seleccionadas > 1:
+                                st.warning(
+                                    "⚠️ Selecciona únicamente un pedido para modificar o ver detalle."
+                                )
 
                         # Sección para ver detalles de pedidos específicos
                         st.subheader("🔍 Ver Detalle de Pedidos")
@@ -1677,13 +1819,55 @@ if perfil in ["admin", "encargado"]:
                                 if st.button(
                                     "✏️ Modificar",
                                     use_container_width=True,
-                                    disabled=not es_admin,
+                                    disabled=not es_admin or num_seleccionadas != 1,
                                     key=f"btn_modificar_{pedido_id}",
                                 ):
                                     if es_admin:
-                                        st.info(
-                                            f"Acción Modificar para el pedido {pedido_id} en desarrollo"
+                                        # preparar el modo edición
+                                        st.session_state.pedido_en_edicion = pedido_id
+                                        st.session_state.estado_en_edicion = (
+                                            estado_actual
                                         )
+
+                                        # extraer detalles del pedido para precargar el formulario
+                                        df_this = df_pendientes[
+                                            df_pendientes["ID_Pedido"].astype(str)
+                                            == str(pedido_id)
+                                        ]
+                                        if not df_this.empty:
+                                            first = df_this.iloc[0]
+                                            st.session_state.cliente_en_edicion = f"{first['ID_Cliente']} - {first['Cliente']}"
+                                            try:
+                                                st.session_state.fecha_entrega_en_edicion = datetime.strptime(
+                                                    first["Fecha_Entrega"], "%Y-%m-%d"
+                                                ).date()
+                                            except Exception:
+                                                st.session_state.fecha_entrega_en_edicion = (
+                                                    date.today()
+                                                )
+                                            st.session_state.obs_en_edicion = first.get(
+                                                "Obs", ""
+                                            )
+
+                                            items = []
+                                            for _, r in df_this.iterrows():
+                                                items.append(
+                                                    {
+                                                        "Seleccionar": False,
+                                                        "Producto": r["Producto"],
+                                                        "Unidades": r["Unidades"],
+                                                    }
+                                                )
+                                            st.session_state.items_nuevo_pedido = items
+
+                                        # resetear cualquier detalle abierto y la tabla para evitar confusiones
+                                        st.session_state.mostrar_detalle_pedido = False
+                                        st.session_state.pedido_detalle_activo = None
+                                        if "tabla_pedidos_resumen" in st.session_state:
+                                            del st.session_state[
+                                                "tabla_pedidos_resumen"
+                                            ]
+                                        st.rerun()
 
                             # Botón 2: Ver detalle (toggle expander) - ÚNICO CONTROL DEL EXPANDER
                             with col_ver:

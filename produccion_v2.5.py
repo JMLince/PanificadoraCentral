@@ -3,7 +3,7 @@ import pandas as pd
 import os
 import signal
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 # st.cache_data.clear() -- comentada para prueba con carga aj. maestros
 
@@ -1242,7 +1242,10 @@ if perfil in ["admin", "encargado"]:
                         )
                     with c2:
                         fecha_entrega = st.date_input(
-                            "Fecha de Entrega:", datetime.now() + timedelta(days=1)
+                            "Fecha de Entrega:",
+                            value=date.today() + timedelta(days=1),
+                            min_value=date.today(),
+                            help="Só se pueden seleccionar fechas de hoy en adelante. Por defecto, mañana para programación anticipated.",
                         )
 
                     obs_general = st.text_input("Observaciones generales del pedido:")
@@ -1288,53 +1291,59 @@ if perfil in ["admin", "encargado"]:
                         use_container_width=True,
                         type="primary",
                     ):
-                        # Generamos un ID de grupo único para este pedido (timestamp)
-                        id_grupo = int(datetime.now().timestamp())
-                        id_cli = cliente_sel.split(" - ")[0]
-                        nom_cli = cliente_sel.split(" - ")[1]
-                        fecha_reg = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-                        # Convertimos las filas del editor en el formato del CSV
-                        nuevos_registros = []
-                        for _, fila in df_editor.iterrows():
-                            nuevos_registros.append(
-                                {
-                                    "ID_Pedido": id_grupo,
-                                    "ID_Cliente": id_cli,
-                                    "Cliente": nom_cli,
-                                    "Producto": fila["Producto"],
-                                    "Unidades": int(fila["Unidades"]),
-                                    "Fecha_Entrega": fecha_entrega.strftime("%Y-%m-%d"),
-                                    "Estado": "Pendiente",
-                                    "Fecha_Registro": fecha_reg,
-                                    "Obs": obs_general,
-                                }
-                            )
-
-                        df_nuevos = pd.DataFrame(nuevos_registros)
-
-                        # Persistencia en CSV
-                        if os.path.exists(ruta_pedidos):
-                            df_hist = pd.read_csv(ruta_pedidos)
-                            df_final = pd.concat(
-                                [df_hist, df_nuevos], ignore_index=True
+                        # Validación de seguridad: la fecha no puede ser anterior a hoy
+                        if fecha_entrega < date.today():
+                            st.error(
+                                "❌ Error: La fecha de entrega no puede ser anterior a hoy. Por favor, selecciona una fecha válida."
                             )
                         else:
-                            df_final = df_nuevos
+                            # Generamos un ID de grupo único para este pedido (timestamp)
+                            id_grupo = int(datetime.now().timestamp())
+                            id_cli = cliente_sel.split(" - ")[0]
+                            nom_cli = cliente_sel.split(" - ")[1]
+                            fecha_reg = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-                        df_final.to_csv(ruta_pedidos, index=False)
+                            # Convertimos las filas del editor en el formato del CSV
+                            nuevos_registros = []
+                            for _, fila in df_editor.iterrows():
+                                nuevos_registros.append(
+                                    {
+                                        "ID_Pedido": id_grupo,
+                                        "ID_Cliente": id_cli,
+                                        "Cliente": nom_cli,
+                                        "Producto": fila["Producto"],
+                                        "Unidades": int(fila["Unidades"]),
+                                        "Fecha_Entrega": fecha_entrega.strftime(
+                                            "%Y-%m-%d"
+                                        ),
+                                        "Estado": "Pendiente",
+                                        "Fecha_Registro": fecha_reg,
+                                        "Obs": obs_general,
+                                    }
+                                )
 
-                        # Limpiamos sesión y refrescamos
-                        if "df_pedido_temp" in st.session_state:
-                            del st.session_state.df_pedido_temp
+                            df_nuevos = pd.DataFrame(nuevos_registros)
 
-                        st.success(
-                            f"✅ Pedido de {len(nuevos_registros)} ítems guardado para {nom_cli}."
-                        )
-                        time.sleep(1)
-                        st.rerun()
+                            # Persistencia en CSV
+                            if os.path.exists(ruta_pedidos):
+                                df_hist = pd.read_csv(ruta_pedidos)
+                                df_final = pd.concat(
+                                    [df_hist, df_nuevos], ignore_index=True
+                                )
+                            else:
+                                df_final = df_nuevos
 
-                # --- Visualización de Pedidos Activos ---
+                            df_final.to_csv(ruta_pedidos, index=False)
+
+                            # Limpiamos sesión y refrescamos
+                            if "df_pedido_temp" in st.session_state:
+                                del st.session_state.df_pedido_temp
+
+                            st.success(
+                                f"✅ Pedido de {len(nuevos_registros)} ítems guardado para {nom_cli}."
+                            )
+                            time.sleep(1)
+                            st.rerun()
                 if os.path.exists(ruta_pedidos):
                     st.divider()
                     st.subheader("📋 Pedidos Programados")

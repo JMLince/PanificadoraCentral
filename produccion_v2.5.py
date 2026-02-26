@@ -1361,17 +1361,35 @@ if perfil in ["admin", "encargado"]:
                         disabled=False,
                         use_container_width=True,
                         hide_index=True,
-                        key="editor_pedidos_v2",
+                        key="editor_nuevo_pedido",
                     )
 
-                    # sincronizar cambios manuales de la tabla de vuelta a la sesión
-                    if df_editor is not None:
-                        try:
-                            st.session_state.items_nuevo_pedido = df_editor.to_dict(
-                                orient="records"
-                            )
-                        except Exception:
-                            pass
+                    # helper para aplicar ediciones pendientes del widget
+                    def apply_widget_edits():
+                        widget = st.session_state.get("editor_nuevo_pedido", {})
+                        edits = []
+                        if hasattr(widget, "get"):
+                            edits = widget.get("edited_rows", [])
+                        elif isinstance(widget, list):
+                            edits = widget
+                        for change in edits:
+                            # support integer entries
+                            if isinstance(change, int):
+                                idx = change
+                                continue  # nothing else to apply
+                            if isinstance(change, dict):
+                                idx = change.get("index")
+                            else:
+                                continue
+                            if idx is None or idx >= len(
+                                st.session_state.items_nuevo_pedido
+                            ):
+                                continue
+                            if isinstance(change, dict):
+                                for k, v in change.items():
+                                    if k == "index":
+                                        continue
+                                    st.session_state.items_nuevo_pedido[idx][k] = v
 
                     # botones de control fuera de la tabla (3 columnas para distribución equitativa)
                     btn1, btn2, btn3 = st.columns([1, 1, 1])
@@ -1381,6 +1399,16 @@ if perfil in ["admin", "encargado"]:
                             use_container_width=True,
                             type="primary",
                         ):
+                            # guardar todos los cambios actuales de la tabla
+                            if df_editor is not None:
+                                try:
+                                    st.session_state.items_nuevo_pedido = (
+                                        df_editor.to_dict(orient="records")
+                                    )
+                                except Exception:
+                                    pass
+                            apply_widget_edits()
+                            # añadir fila nueva con valores por defecto al final
                             st.session_state.items_nuevo_pedido.append(
                                 {
                                     "Seleccionar": False,
@@ -1388,15 +1416,40 @@ if perfil in ["admin", "encargado"]:
                                     "Unidades": 1,
                                 }
                             )
+                            # simplemente rerun para que la tabla se redibuje automáticamente
                             st.rerun()
                     with btn2:
                         if st.button(
                             "🗑️ Borrar seleccionados", use_container_width=True
                         ):
-                            # filtrar los que no están seleccionados
+                            # capturar estado actual antes de filtrar
+                            if df_editor is not None:
+                                try:
+                                    st.session_state.items_nuevo_pedido = (
+                                        df_editor.to_dict(orient="records")
+                                    )
+                                except Exception:
+                                    pass
+                            apply_widget_edits()
                             df_now = pd.DataFrame(st.session_state.items_nuevo_pedido)
                             if "Seleccionar" in df_now.columns:
                                 df_now = df_now[~df_now["Seleccionar"]]
+                            if df_now.empty:
+                                df_now = pd.DataFrame(
+                                    [
+                                        {
+                                            "Seleccionar": False,
+                                            "Producto": lista_productos[0],
+                                            "Unidades": 1,
+                                        }
+                                    ]
+                                )
+                            st.session_state.items_nuevo_pedido = df_now.to_dict(
+                                orient="records"
+                            )
+                            if "editor_nuevo_pedido" in st.session_state:
+                                del st.session_state["editor_nuevo_pedido"]
+                            st.rerun()
                             st.session_state.items_nuevo_pedido = df_now.to_dict(
                                 orient="records"
                             )

@@ -7,9 +7,36 @@ ARCHIVO_AJUSTES = "data/ajustes_produccion.json"
 
 
 def cargar_ajustes():
+    # si existe un CSV de respaldo podemos cargarlo y convertirlo a json
+    csv_backup = "data/ajustes_produccion.csv"
+    if os.path.exists(csv_backup) and not os.path.exists(ARCHIVO_AJUSTES):
+        try:
+            df = pd.read_csv(csv_backup, encoding="utf-8")
+        except Exception:
+            df = pd.read_csv(csv_backup, encoding="latin1")
+        # normalizar encabezados sucios
+        df.rename(
+            columns={
+                "Tope 1 (CrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­tico)": "Tope 1 (critico)",
+                "Tope 1 (Crítico)": "Tope 1 (critico)",
+                "Tope 1 (Critico)": "Tope 1 (critico)",
+            },
+            inplace=True,
+        )
+        # guardar como json para futuras ejecuciones
+        guardar_ajustes(df)
+        # seguir con limpieza de masa base más abajo
     if os.path.exists(ARCHIVO_AJUSTES):
-        with open(ARCHIVO_AJUSTES, "r") as f:
+        with open(ARCHIVO_AJUSTES, "r", encoding="utf-8") as f:
             df = pd.DataFrame(json.load(f))
+            # Renombrar columnas antiguas con acentos o casos varios
+            df.rename(
+                columns={
+                    "Tope 1 (Crítico)": "Tope 1 (critico)",
+                    "Tope 1 (Critico)": "Tope 1 (critico)",
+                },
+                inplace=True,
+            )
             # Limpiar espacios en "Masa Base" para evitar errores de sincronización
             if "Masa Base" in df.columns:
                 df["Masa Base"] = df["Masa Base"].astype(str).str.strip()
@@ -33,7 +60,7 @@ def cargar_ajustes():
                     "BAGEL BCO GDE",
                     "BAGEL INTEGRAL GDE",
                 ],
-                "Tope 1 (Crítico)": [
+                "Tope 1 (critico)": [
                     600,
                     400,
                     200,

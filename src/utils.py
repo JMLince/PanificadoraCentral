@@ -157,7 +157,7 @@ def guardar_historial_stock(df_rpd, df_pa, usuario, comentario=""):
         df_final.to_csv(archivo, index=False, encoding="utf-8")
         return True
     except Exception as e:
-        print(f"Error crítico al guardar stock: {e}")
+        print(f"Error critico al guardar stock: {e}")
         return False
 
 

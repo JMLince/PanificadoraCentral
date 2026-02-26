@@ -1,128 +1,128 @@
 [
     {
         "Masa Base": "SALVADO GRANDE",
-        "Tope 1 (CrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­tico)": 300,
         "Producir 1": 400,
         "Tope 2 (Medio)": 600,
         "Producir 2": 180,
         "Tope 3 (Alto)": 900,
-        "Producir 3": 100
+        "Producir 3": 100,
+        "Tope 1 (critico)": 300
     },
     {
         "Masa Base": "BLANCO GRANDE",
-        "Tope 1 (CrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­tico)": 300,
         "Producir 1": 450,
         "Tope 2 (Medio)": 600,
         "Producir 2": 300,
         "Tope 3 (Alto)": 900,
-        "Producir 3": 90
+        "Producir 3": 90,
+        "Tope 1 (critico)": 300
     },
     {
         "Masa Base": "INTEGRAL SEMILLADO",
-        "Tope 1 (CrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­tico)": 600,
         "Producir 1": 2100,
         "Tope 2 (Medio)": 1100,
         "Producir 2": 1850,
         "Tope 3 (Alto)": 1900,
-        "Producir 3": 800
+        "Producir 3": 800,
+        "Tope 1 (critico)": 600
     },
     {
         "Masa Base": "BLANCO LARGO",
-        "Tope 1 (CrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­tico)": 300,
         "Producir 1": 1700,
         "Tope 2 (Medio)": 1200,
         "Producir 2": 1200,
         "Tope 3 (Alto)": 1700,
-        "Producir 3": 700
+        "Producir 3": 700,
+        "Tope 1 (critico)": 300
     },
     {
         "Masa Base": "SALVADO LARGO",
-        "Tope 1 (CrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­tico)": 300,
         "Producir 1": 2100,
         "Tope 2 (Medio)": 1200,
         "Producir 2": 1400,
         "Tope 3 (Alto)": 1750,
-        "Producir 3": 800
+        "Producir 3": 800,
+        "Tope 1 (critico)": 300
     },
     {
         "Masa Base": "BLANCO CHICO",
-        "Tope 1 (CrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­tico)": 100,
         "Producir 1": 110,
         "Tope 2 (Medio)": 140,
         "Producir 2": 80,
         "Tope 3 (Alto)": 200,
-        "Producir 3": 30
+        "Producir 3": 30,
+        "Tope 1 (critico)": 100
     },
     {
         "Masa Base": "SEMILLADO CHICO",
-        "Tope 1 (CrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­tico)": 250,
         "Producir 1": 300,
         "Tope 2 (Medio)": 450,
         "Producir 2": 200,
         "Tope 3 (Alto)": 550,
-        "Producir 3": 100
+        "Producir 3": 100,
+        "Tope 1 (critico)": 250
     },
     {
         "Masa Base": "OCHO CEREALES",
-        "Tope 1 (CrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­tico)": 100,
         "Producir 1": 160,
         "Tope 2 (Medio)": 200,
         "Producir 2": 80,
         "Tope 3 (Alto)": 250,
-        "Producir 3": 0
+        "Producir 3": 0,
+        "Tope 1 (critico)": 100
     },
     {
         "Masa Base": "SEMILLADO MEDIANO",
-        "Tope 1 (CrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­tico)": 100,
         "Producir 1": 500,
         "Tope 2 (Medio)": 200,
         "Producir 2": 340,
         "Tope 3 (Alto)": 600,
-        "Producir 3": 180
+        "Producir 3": 180,
+        "Tope 1 (critico)": 100
     },
     {
         "Masa Base": "SEMILLADO SIN SAL",
-        "Tope 1 (CrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­tico)": 120,
         "Producir 1": 160,
         "Tope 2 (Medio)": 200,
         "Producir 2": 110,
         "Tope 3 (Alto)": 260,
-        "Producir 3": 60
+        "Producir 3": 60,
+        "Tope 1 (critico)": 120
     },
     {
         "Masa Base": "CAMPO MEDIANO",
-        "Tope 1 (CrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­tico)": 100,
         "Producir 1": 200,
         "Tope 2 (Medio)": 250,
         "Producir 2": 120,
         "Tope 3 (Alto)": 400,
-        "Producir 3": 65
+        "Producir 3": 65,
+        "Tope 1 (critico)": 100
     },
     {
         "Masa Base": "BAGEL BCO SEMILLADO GDE",
-        "Tope 1 (CrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­tico)": 50,
         "Producir 1": 85,
         "Tope 2 (Medio)": 70,
         "Producir 2": 55,
         "Tope 3 (Alto)": 110,
-        "Producir 3": 40
+        "Producir 3": 40,
+        "Tope 1 (critico)": 50
     },
     {
         "Masa Base": "BAGEL BCO GDE",
-        "Tope 1 (CrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­tico)": 40,
         "Producir 1": 85,
         "Tope 2 (Medio)": 50,
         "Producir 2": 45,
         "Tope 3 (Alto)": 65,
-        "Producir 3": 30
+        "Producir 3": 30,
+        "Tope 1 (critico)": 40
     },
     {
         "Masa Base": "BAGEL INTEGRAL GDE",
-        "Tope 1 (CrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­tico)": 40,
         "Producir 1": 85,
         "Tope 2 (Medio)": 50,
         "Producir 2": 45,
         "Tope 3 (Alto)": 75,
-        "Producir 3": 30
+        "Producir 3": 30,
+        "Tope 1 (critico)": 40
     }
 ]

@@ -511,9 +511,9 @@ def logica_t(row):
     s = row.get("Stock Actual", 0)
 
     # Usamos .get() para evitar el KeyError si la columna falta o cambia de nombre
-    t1 = row.get("Tope 1 (Crítico)", row.get("Tope 1 (Critico)", 0))
-    t2 = row.get("Tope 2 (Medio)", row.get("Tope 2 (Medio)", 0))
-    t3 = row.get("Tope 3 (Alto)", row.get("Tope 3 (Alto)", 0))
+    t1 = row.get("Tope 1 (critico)", 0)
+    t2 = row.get("Tope 2 (Medio)", 0)
+    t3 = row.get("Tope 3 (Alto)", 0)
 
     p1 = row.get("Producir 1", 0)
     p2 = row.get("Producir 2", 0)
@@ -1012,8 +1012,15 @@ if perfil == "admin":
     with tabs[5]:
         st.header("⚙️ Configuración Maestra")
         st.warning("⚠️ Solo personal autorizado.")
+        # reordenar columnas para que "Tope 1 (critico)" sea la segunda
+        df_display = st.session_state.df_ajustes.copy()
+        if not df_display.empty:
+            desired_order = ["Masa Base", "Tope 1 (critico)", "Producir 1"]
+            cols = [c for c in desired_order if c in df_display.columns]
+            cols += [c for c in df_display.columns if c not in cols]
+            df_display = df_display[cols]
         edit_m = st.data_editor(
-            st.session_state.df_ajustes,
+            df_display,
             key="ed_maestro",
             hide_index=True,
             use_container_width=True,
@@ -1050,7 +1057,17 @@ if perfil == "admin":
 
             if archivo_subido is not None:
                 if st.button("🚀 Aplicar datos del CSV a Ajustes Maestros"):
-                    df_subido = pd.read_csv(archivo_subido)
+                    # leer con utf-8 para enseñar avisos pronto si hay otro encoding
+                    df_subido = pd.read_csv(archivo_subido, encoding="utf-8")
+                    # normalizar posibles encabezados rotos/acentuados
+                    df_subido.rename(
+                        columns={
+                            "Tope 1 (CrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­tico)": "Tope 1 (critico)",
+                            "Tope 1 (Crítico)": "Tope 1 (critico)",
+                            "Tope 1 (Critico)": "Tope 1 (critico)",
+                        },
+                        inplace=True,
+                    )
                     # Limpiar espacios en "Masa Base" para evitar errores de sincronización
                     if "Masa Base" in df_subido.columns:
                         df_subido["Masa Base"] = (

@@ -52,6 +52,18 @@ st.markdown(
         padding: 8px;
         border-bottom: 1px solid rgba(128, 128, 128, 0.2);
     }
+
+    /* Forzar visibilidad de checkboxes y radio buttons en cualquier tabla o editor */
+    [data-testid="stDataFrameDataLayer"] [role="gridcell"] button,
+    [data-testid="stDataFrameDataLayer"] [role="gridcell"] input,
+    div[data-baseweb="checkbox"] {
+        opacity: 1 !important;
+        visibility: visible !important;
+    }
+    /* Asegurar que la primera columna (donde suele estar el selector) sea siempre opaca */
+    [data-testid="stDataFrameDataLayer"] [aria-colindex="1"] {
+        opacity: 1 !important;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -1233,7 +1245,41 @@ if perfil in ["admin", "encargado"]:
                 )
             else:
                 # --- FORMULARIO PRÁCTICO ---
+                # CSS para mostrar checkboxes sin hover
+                st.markdown(
+                    """
+                <style>
+                [data-testid="stTable"] th:first-child, [data-testid="stTable"] td:first-child {
+                    opacity: 1 !important;
+                }
+                /* Forzar visibilidad en data_editor moderno */
+                div[data-testid="stDataFrameDataLayer"] button {
+                    opacity: 1 !important;
+                }
+                </style>
+                """,
+                    unsafe_allow_html=True,
+                )
                 with st.expander("🆕 Generar Nuevo Pedido", expanded=True):
+                    # Contenedor local para forzar CSS en este editor
+                    with st.container():
+                        st.markdown(
+                            """
+                            <style>
+                            button {
+                                opacity: 1 !important;
+                            }
+                            /* Selector específico para checkboxes de data_editor */
+                            div[data-testid="stDataFrameDataLayer"] button[role="checkbox"],
+                            div[data-testid="stDataFrameDataLayer"] button[aria-checked] {
+                                opacity: 1 !important;
+                                visibility: visible !important;
+                            }
+                            </style>
+                        """,
+                            unsafe_allow_html=True,
+                        )
+
                     # Encabezado fijo del pedido
                     c1, c2 = st.columns(2)
                     with c1:
@@ -1252,7 +1298,7 @@ if perfil in ["admin", "encargado"]:
 
                     st.write("### Detalle de Productos")
                     st.info(
-                        "Haz clic en '+' para agregar filas o presiona 'Supr' para borrar."
+                        "Haz clic en '+' para agregar filas. Para borrar, selecciona la fila y presiona 'Supr' o usa el icono de papelera al final."
                     )
 
                     # Inicializamos un DataFrame vacío en sesión para el editor si no existe
@@ -1263,24 +1309,30 @@ if perfil in ["admin", "encargado"]:
                         )
 
                     # EDITOR DINÁMICO (La "Tabla" de carga)
+                    df_temp = st.session_state.df_pedido_temp
+                    # preparar configuraciones de columnas sin selección
+                    col_cfg = {}
+                    # Producto obligatorio como selectbox para evitar None
+                    col_cfg["Producto"] = st.column_config.SelectboxColumn(
+                        "Producto",
+                        options=lista_productos,
+                        required=True,
+                        width="large",
+                    )
+                    # Unidades mínimo 1
+                    col_cfg["Unidades"] = st.column_config.NumberColumn(
+                        "Unidades",
+                        min_value=1,
+                        step=1,
+                        format="%d",
+                        required=True,
+                    )
+
                     df_editor = st.data_editor(
-                        st.session_state.df_pedido_temp,
-                        column_config={
-                            "Producto": st.column_config.SelectboxColumn(
-                                "Producto",
-                                options=lista_productos,
-                                required=True,
-                                width="large",
-                            ),
-                            "Unidades": st.column_config.NumberColumn(
-                                "Unidades",
-                                min_value=1,
-                                step=1,
-                                format="%d",
-                                required=True,
-                            ),
-                        },
+                        df_temp,
+                        column_config=col_cfg,
                         num_rows="dynamic",
+                        disabled=False,
                         use_container_width=True,
                         hide_index=True,
                         key="editor_pedidos_v2",
@@ -1306,13 +1358,24 @@ if perfil in ["admin", "encargado"]:
                             # Convertimos las filas del editor en el formato del CSV
                             nuevos_registros = []
                             for _, fila in df_editor.iterrows():
+                                producto = fila.get("Producto")
+                                unidades = fila.get("Unidades")
+                                # ignorar filas vacías o no seleccionadas
+                                if pd.isna(producto) or str(producto).strip() == "":
+                                    continue
+                                try:
+                                    unidades_val = int(unidades)
+                                except Exception:
+                                    unidades_val = 0
+                                if unidades_val <= 0:
+                                    continue
                                 nuevos_registros.append(
                                     {
                                         "ID_Pedido": id_grupo,
                                         "ID_Cliente": id_cli,
                                         "Cliente": nom_cli,
-                                        "Producto": fila["Producto"],
-                                        "Unidades": int(fila["Unidades"]),
+                                        "Producto": producto,
+                                        "Unidades": unidades_val,
                                         "Fecha_Entrega": fecha_entrega.strftime(
                                             "%Y-%m-%d"
                                         ),
@@ -1411,25 +1474,38 @@ if perfil in ["admin", "encargado"]:
                             by=["Fecha entrega", "Nro. Pedido"], ascending=[True, False]
                         )
 
-                        # Mostrar tabla resumida con selección de filas habilitada
-                        seleccion_tabla = st.dataframe(
+                        # Mostrar tabla resumida usando data_editor para checkbox persistente
+                        df_resumen = df_resumen.copy()
+                        # insertar columna de selección al principio
+                        if "Seleccionar" not in df_resumen.columns:
+                            df_resumen.insert(0, "Seleccionar", False)
+
+                        col_cfg = {
+                            "Seleccionar": st.column_config.CheckboxColumn(
+                                "Seleccionar",
+                                help="Marca para elegir este pedido",
+                            )
+                        }
+                        # ordenar columnas para asegurar que 'Seleccionar' quede la primera
+                        column_order = list(df_resumen.columns)
+
+                        df_edit = st.data_editor(
                             df_resumen,
                             use_container_width=True,
                             hide_index=True,
-                            on_select="rerun",
-                            selection_mode="single-row",
+                            column_config=col_cfg,
+                            column_order=column_order,
                             key="tabla_pedidos_resumen",
                         )
 
-                        # Obtener el pedido seleccionado de la tabla
+                        # Obtener el pedido seleccionado a partir del checkbox
                         pedido_seleccionado = None
-                        if seleccion_tabla.selection.rows:
-                            # Obtener el índice de la fila seleccionada
-                            indice_seleccionado = seleccion_tabla.selection.rows[0]
-                            if indice_seleccionado < len(df_resumen):
-                                pedido_seleccionado = df_resumen.iloc[
-                                    indice_seleccionado
-                                ]["Nro. Pedido"]
+                        if not df_edit.empty and "Seleccionar" in df_edit.columns:
+                            seleccionadas = df_edit[df_edit["Seleccionar"]]
+                            if not seleccionadas.empty:
+                                pedido_seleccionado = seleccionadas.iloc[0][
+                                    "Nro. Pedido"
+                                ]
 
                         # Sección para ver detalles de pedidos específicos
                         st.subheader("🔍 Ver Detalle de Pedidos")

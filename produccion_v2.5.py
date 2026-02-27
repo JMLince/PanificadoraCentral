@@ -91,6 +91,28 @@ if "df_ajustes" not in st.session_state:
             st.session_state.df_ajustes["Masa Base"].astype(str).str.strip()
         )
 
+# Inicialización correcta de items_nuevo_pedido: asegurar DataFrame
+if "items_nuevo_pedido" not in st.session_state or isinstance(
+    st.session_state.get("items_nuevo_pedido"), list
+):
+    # Si viene como lista convertir a DataFrame; si no existe, crear vacío con columnas.
+    current = st.session_state.get("items_nuevo_pedido")
+    if isinstance(current, list):
+        try:
+            st.session_state.items_nuevo_pedido = pd.DataFrame(current)
+        except Exception:
+            st.session_state.items_nuevo_pedido = pd.DataFrame(
+                columns=["Seleccionar", "Producto", "Unidades"]
+            )
+    else:
+        st.session_state.items_nuevo_pedido = pd.DataFrame(
+            columns=["Seleccionar", "Producto", "Unidades"]
+        )
+
+# Contador de versión para key del editor (Key Versioning)
+if "editor_version" not in st.session_state:
+    st.session_state.editor_version = 0
+
 datos_tecnicos = {
     "Masa Base": [
         "SALVADO GRANDE",
@@ -1226,6 +1248,8 @@ if perfil in ["admin", "encargado"]:
     try:
         idx_pedidos = titulos_tabs.index("📝 Carga Pedidos")
         with tabs[idx_pedidos]:
+            # ancla siempre presente para scroll automático
+            st.markdown("<div id='scroll-to-editor'></div>", unsafe_allow_html=True)
             # si estamos en modo edición de un pedido, ajustar encabezado
             if "pedido_en_edicion" in st.session_state:
                 st.header("✏️ Modificar Pedido")
@@ -1261,6 +1285,9 @@ if perfil in ["admin", "encargado"]:
                     "⚠️ No se encontró la tabla de Ajustes Maestros para referenciar productos."
                 )
             else:
+                # Ancla de scroll al principio de la pestaña
+                st.components.v1.html('<div id="scroll-to-editor"></div>', height=0)
+
                 # --- FORMULARIO PRÁCTICO ---
                 # CSS para mostrar checkboxes sin hover
                 st.markdown(
@@ -1282,12 +1309,23 @@ if perfil in ["admin", "encargado"]:
                 exp_label = (
                     "🔧 Modificar Pedido" if editing else "🆕 Generar Nuevo Pedido"
                 )
-                with st.expander(exp_label, expanded=True):
-                    # Contenedor local para forzar CSS en este editor
-                    with st.container():
+
+                # ancla de scroll y posible borde resaltado
+                with st.container():
+                    # (old anchor removed; scroll target is at top of tab now)
+                    if editing:
+                        # comenzamos un bloque con borde naranja alrededor del formulario
                         st.markdown(
-                            """
-                            <style>
+                            "<div style='border:2px solid #FFA500; padding:10px;'>",
+                            unsafe_allow_html=True,
+                        )
+
+                    with st.expander(exp_label, expanded=True):
+                        # Contenedor local para forzar CSS en este editor
+                        with st.container():
+                            st.markdown(
+                                """
+                                <style>
                             button {
                                 opacity: 1 !important;
                             }
@@ -1299,8 +1337,8 @@ if perfil in ["admin", "encargado"]:
                             }
                             </style>
                         """,
-                            unsafe_allow_html=True,
-                        )
+                                unsafe_allow_html=True,
+                            )
 
                     # Encabezado fijo del pedido
                     c1, c2 = st.columns(2)
@@ -1326,7 +1364,10 @@ if perfil in ["admin", "encargado"]:
                         if editing and "fecha_entrega_en_edicion" in st.session_state:
                             fecha_entrega = st.date_input(
                                 "Fecha de Entrega:",
-                                value=st.session_state.fecha_entrega_en_edicion,
+                                value=max(
+                                    st.session_state.fecha_entrega_en_edicion,
+                                    date.today(),
+                                ),
                                 min_value=date.today(),
                                 help="Só se pueden seleccionar fechas de hoy en adelante.",
                             )
@@ -1355,14 +1396,18 @@ if perfil in ["admin", "encargado"]:
 
                     # manejar lista de productos en session_state
                     if not editing:
-                        if "items_nuevo_pedido" not in st.session_state:
-                            st.session_state.items_nuevo_pedido = [
-                                {
-                                    "Seleccionar": False,
-                                    "Producto": lista_productos[0],
-                                    "Unidades": 1,
-                                }
-                            ]
+                        if "items_nuevo_pedido" not in st.session_state or isinstance(
+                            st.session_state.get("items_nuevo_pedido"), list
+                        ):
+                            st.session_state.items_nuevo_pedido = pd.DataFrame(
+                                [
+                                    {
+                                        "Seleccionar": False,
+                                        "Producto": lista_productos[0],
+                                        "Unidades": 1,
+                                    }
+                                ]
+                            )
                     else:
                         # si se perdió la lista por alguna recarga, intentar reconstruirla
                         if "items_nuevo_pedido" not in st.session_state:
@@ -1382,23 +1427,29 @@ if perfil in ["admin", "encargado"]:
                                                 "Unidades": r["Unidades"],
                                             }
                                         )
-                                    st.session_state.items_nuevo_pedido = items
+                                    st.session_state.items_nuevo_pedido = pd.DataFrame(
+                                        items
+                                    )
                                 else:
-                                    st.session_state.items_nuevo_pedido = [
+                                    st.session_state.items_nuevo_pedido = pd.DataFrame(
+                                        [
+                                            {
+                                                "Seleccionar": False,
+                                                "Producto": lista_productos[0],
+                                                "Unidades": 1,
+                                            }
+                                        ]
+                                    )
+                            else:
+                                st.session_state.items_nuevo_pedido = pd.DataFrame(
+                                    [
                                         {
                                             "Seleccionar": False,
                                             "Producto": lista_productos[0],
                                             "Unidades": 1,
                                         }
                                     ]
-                            else:
-                                st.session_state.items_nuevo_pedido = [
-                                    {
-                                        "Seleccionar": False,
-                                        "Producto": lista_productos[0],
-                                        "Unidades": 1,
-                                    }
-                                ]
+                                )
 
                     # convertir lista a DataFrame para editar, asegurando columna Seleccionar primero
                     df_temp = pd.DataFrame(st.session_state.items_nuevo_pedido)
@@ -1430,24 +1481,34 @@ if perfil in ["admin", "encargado"]:
                         required=True,
                     )
 
+                    # Pasar directamente el DataFrame del session_state
                     df_editor = st.data_editor(
-                        df_temp,
+                        st.session_state.items_nuevo_pedido,
                         column_config=col_cfg,
                         num_rows="fixed",
                         disabled=False,
                         use_container_width=True,
                         hide_index=True,
-                        key="editor_nuevo_pedido",
+                        key=f"editor_nuevo_pedido_{st.session_state.editor_version}",
                     )
 
                     # helper para aplicar ediciones pendientes del widget
                     def apply_widget_edits():
-                        widget = st.session_state.get("editor_nuevo_pedido", {})
+                        # usar la versión actual del editor (key versioning)
+                        current_key = (
+                            f"editor_nuevo_pedido_{st.session_state.editor_version}"
+                        )
+                        widget = (
+                            st.session_state[current_key]
+                            if current_key in st.session_state
+                            else {}
+                        )
                         edits = []
                         if hasattr(widget, "get"):
                             edits = widget.get("edited_rows", [])
                         elif isinstance(widget, list):
                             edits = widget
+                        # process edits only if we have edited_rows
                         for change in edits:
                             # support integer entries
                             if isinstance(change, int):
@@ -1457,15 +1518,34 @@ if perfil in ["admin", "encargado"]:
                                 idx = change.get("index")
                             else:
                                 continue
-                            if idx is None or idx >= len(
-                                st.session_state.items_nuevo_pedido
+                            # Si items_nuevo_pedido es DataFrame, aplicar con .at
+                            if isinstance(
+                                st.session_state.items_nuevo_pedido, pd.DataFrame
                             ):
-                                continue
-                            if isinstance(change, dict):
-                                for k, v in change.items():
-                                    if k == "index":
-                                        continue
-                                    st.session_state.items_nuevo_pedido[idx][k] = v
+                                df_tmp = st.session_state.items_nuevo_pedido
+                                if idx is None or idx >= df_tmp.shape[0]:
+                                    continue
+                                if isinstance(change, dict):
+                                    for k, v in change.items():
+                                        if k == "index":
+                                            continue
+                                        if k not in df_tmp.columns:
+                                            # crear columna si no existe
+                                            df_tmp[k] = ""
+                                        df_tmp.at[idx, k] = v
+                                st.session_state.items_nuevo_pedido = df_tmp
+                            else:
+                                # mantener compatibilidad con listas de diccionarios
+                                if idx is None or idx >= len(
+                                    st.session_state.items_nuevo_pedido
+                                ):
+                                    continue
+                                if isinstance(change, dict):
+                                    for k, v in change.items():
+                                        if k == "index":
+                                            continue
+                                        st.session_state.items_nuevo_pedido[idx][k] = v
+                        # end apply_widget_edits
 
                     # botones de control fuera de la tabla (3 columnas para distribución equitativa)
                     btn1, btn2, btn3 = st.columns([1, 1, 1])
@@ -1478,19 +1558,40 @@ if perfil in ["admin", "encargado"]:
                             # guardar todos los cambios actuales de la tabla
                             if df_editor is not None:
                                 try:
+                                    # mantener tipo DataFrame en session_state
                                     st.session_state.items_nuevo_pedido = (
-                                        df_editor.to_dict(orient="records")
+                                        df_editor.copy()
                                     )
                                 except Exception:
                                     pass
                             apply_widget_edits()
                             # añadir fila nueva con valores por defecto al final
-                            st.session_state.items_nuevo_pedido.append(
-                                {
-                                    "Seleccionar": False,
-                                    "Producto": lista_productos[0],
-                                    "Unidades": 1,
-                                }
+                            new_row = {
+                                "Seleccionar": False,
+                                "Producto": lista_productos[0],
+                                "Unidades": 1,
+                            }
+                            if isinstance(
+                                st.session_state.items_nuevo_pedido, pd.DataFrame
+                            ):
+                                st.session_state.items_nuevo_pedido = pd.concat(
+                                    [
+                                        st.session_state.items_nuevo_pedido,
+                                        pd.DataFrame([new_row]),
+                                    ],
+                                    ignore_index=True,
+                                )
+                            else:
+                                # compatibilidad: convertir a lista y append
+                                try:
+                                    st.session_state.items_nuevo_pedido.append(new_row)
+                                except Exception:
+                                    st.session_state.items_nuevo_pedido = pd.DataFrame(
+                                        [new_row]
+                                    )
+                            # incrementar la versión del editor para forzar recreación del widget
+                            st.session_state.editor_version = (
+                                st.session_state.get("editor_version", 0) + 1
                             )
                             # simplemente rerun para que la tabla se redibuje automáticamente
                             st.rerun()
@@ -1498,20 +1599,34 @@ if perfil in ["admin", "encargado"]:
                         if st.button(
                             "🗑️ Borrar seleccionados", use_container_width=True
                         ):
-                            # capturar estado actual antes de filtrar
-                            if df_editor is not None:
-                                try:
-                                    st.session_state.items_nuevo_pedido = (
-                                        df_editor.to_dict(orient="records")
+                            # Sincronización manual forzada: obtener cambios directamente del widget
+                            cambios = st.session_state.get(
+                                f"editor_nuevo_pedido_{st.session_state.editor_version}",
+                                {},
+                            )
+                            edited_rows = cambios.get("edited_rows", {})
+
+                            # Aplicar manualmente los cambios al DataFrame antes de filtrar
+                            for idx_str, values in edited_rows.items():
+                                idx = int(idx_str)
+                                for col, val in values.items():
+                                    st.session_state.items_nuevo_pedido.at[idx, col] = (
+                                        val
                                     )
-                                except Exception:
-                                    pass
-                            apply_widget_edits()
-                            df_now = pd.DataFrame(st.session_state.items_nuevo_pedido)
-                            if "Seleccionar" in df_now.columns:
-                                df_now = df_now[~df_now["Seleccionar"]]
-                            if df_now.empty:
-                                df_now = pd.DataFrame(
+
+                            # DEBUG: contar antes
+                            count_before = st.session_state.items_nuevo_pedido.shape[0]
+                            print(f"[DEBUG] Antes del filtrado: {count_before} filas")
+
+                            # Filtrado por valor real
+                            df_actual = st.session_state.items_nuevo_pedido.copy()
+                            st.session_state.items_nuevo_pedido = df_actual[
+                                df_actual["Seleccionar"] == False
+                            ].reset_index(drop=True)
+
+                            # Si queda vacío, agregar fila por defecto
+                            if st.session_state.items_nuevo_pedido.empty:
+                                st.session_state.items_nuevo_pedido = pd.DataFrame(
                                     [
                                         {
                                             "Seleccionar": False,
@@ -1520,16 +1635,17 @@ if perfil in ["admin", "encargado"]:
                                         }
                                     ]
                                 )
-                            st.session_state.items_nuevo_pedido = df_now.to_dict(
-                                orient="records"
+
+                            count_after = st.session_state.items_nuevo_pedido.shape[0]
+                            print(
+                                f"[DEBUG] Reporte final: antes={count_before}, despues={count_after}"
                             )
-                            if "editor_nuevo_pedido" in st.session_state:
-                                del st.session_state["editor_nuevo_pedido"]
-                            st.rerun()
-                            st.session_state.items_nuevo_pedido = df_now.to_dict(
-                                orient="records"
+
+                            # Destrucción y reconstrucción del widget
+                            st.session_state.editor_version += (
+                                1  # Cambia la key para destruir el widget anterior
                             )
-                            st.rerun()
+                            st.rerun()  # Fuerza a Streamlit a volver a empezar con el DataFrame limpio
                     # columna 3 intencionalmente vacía para espaciado
 
                     # permitir cancelar edición si estamos modificando
@@ -1545,10 +1661,13 @@ if perfil in ["admin", "encargado"]:
                             "fecha_entrega_en_edicion",
                             "obs_en_edicion",
                             "items_nuevo_pedido",
-                            "editor_nuevo_pedido",
                         ]:
                             if key in st.session_state:
                                 del st.session_state[key]
+                        # Incrementar versión del editor para forzar recreación del widget
+                        st.session_state.editor_version = (
+                            st.session_state.get("editor_version", 0) + 1
+                        )
                         st.rerun()
 
                     save_label = (
@@ -1646,8 +1765,10 @@ if perfil in ["admin", "encargado"]:
                             if "df_pedido_temp" in st.session_state:
                                 del st.session_state.df_pedido_temp
 
-                            if "editor_nuevo_pedido" in st.session_state:
-                                del st.session_state["editor_nuevo_pedido"]
+                            # Incrementar versión del editor en lugar de eliminar la key directamente
+                            st.session_state.editor_version = (
+                                st.session_state.get("editor_version", 0) + 1
+                            )
                             if "items_nuevo_pedido" in st.session_state:
                                 del st.session_state["items_nuevo_pedido"]
 
@@ -1661,6 +1782,9 @@ if perfil in ["admin", "encargado"]:
                                 )
                             time.sleep(1)
                             st.rerun()
+                    # cerrar borde resaltado si lo habíamos abierto
+                    if editing:
+                        st.markdown("</div>", unsafe_allow_html=True)
                 if os.path.exists(ruta_pedidos):
                     st.divider()
                     st.subheader("📋 Pedidos Programados")
@@ -1858,7 +1982,9 @@ if perfil in ["admin", "encargado"]:
                                                         "Unidades": r["Unidades"],
                                                     }
                                                 )
-                                            st.session_state.items_nuevo_pedido = items
+                                            st.session_state.items_nuevo_pedido = (
+                                                pd.DataFrame(items)
+                                            )
 
                                         # resetear cualquier detalle abierto y la tabla para evitar confusiones
                                         st.session_state.mostrar_detalle_pedido = False
@@ -1867,6 +1993,25 @@ if perfil in ["admin", "encargado"]:
                                             del st.session_state[
                                                 "tabla_pedidos_resumen"
                                             ]
+                                        # disparar scroll al formulario en la otra pestaña con retardo y cambio de tab
+                                        st.components.v1.html(
+                                            """
+                                            <script>
+                                                var windowParent = window.parent;
+                                                // 1. Forzar cambio de pestaña
+                                                var tabs = windowParent.document.querySelectorAll('button[data-baseweb="tab"]');
+                                                tabs.forEach(tab => {
+                                                    if (tab.innerText.includes("Generar Nuevo Pedido")) tab.click();
+                                                });
+                                                // 2. Esperar renderizado y hacer scroll
+                                                setTimeout(function() {
+                                                    var el = windowParent.document.getElementById("scroll-to-editor");
+                                                    if (el) el.scrollIntoView({behavior: "smooth", block: "start"});
+                                                }, 500);
+                                            </script>
+                                            """,
+                                            height=0,
+                                        )
                                         st.rerun()
 
                             # Botón 2: Ver detalle (toggle expander) - ÚNICO CONTROL DEL EXPANDER

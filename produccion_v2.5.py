@@ -4,6 +4,7 @@ import os
 import signal
 import time
 from datetime import datetime, timedelta, date
+from fpdf import FPDF
 
 # st.cache_data.clear() -- comentada para prueba con carga aj. maestros
 
@@ -25,6 +26,64 @@ st.set_page_config(page_title="Panificadora Central v2.5", layout="wide")
 # --- 1. SISTEMA DE LOGIN ---
 # Esta función detiene la ejecución si el usuario no está autenticado
 generar_login()
+
+
+# --- FUNCIÓN PARA GENERAR REMITO PDF ---
+def generar_pdf_remito(id_pedido, cliente, productos_items):
+    """
+    Genera un PDF de remito para un pedido.
+
+    Args:
+        id_pedido (str): ID del pedido
+        cliente (str): Nombre del cliente
+        productos_items (list): Lista de dicts con {'Producto': str, 'Unidades': int}
+
+    Returns:
+        bytes: Contenido del PDF en bytes, o None si hay error
+    """
+    try:
+        pdf = FPDF()
+        pdf.add_page()
+
+        # Título
+        pdf.set_font("Helvetica", "B", 16)
+        pdf.cell(0, 10, "PANIFICADORA CENTRAL", ln=True, align="C")
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.cell(0, 8, "REMITO", ln=True, align="C")
+
+        # Espacio
+        pdf.ln(5)
+
+        # Datos del pedido
+        pdf.set_font("Helvetica", "", 11)
+        pdf.cell(0, 6, f"Nro. Pedido: {id_pedido}", ln=True)
+        pdf.cell(0, 6, f"Cliente: {cliente}", ln=True)
+        pdf.cell(0, 6, f"Fecha: {datetime.now().strftime('%d/%m/%Y')}", ln=True)
+
+        # Espacio
+        pdf.ln(5)
+
+        # Encabezados de tabla
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(100, 7, "Producto", border=1)
+        pdf.cell(40, 7, "Unidades", border=1, align="R")
+        pdf.ln()
+
+        # Contenido de tabla (productos)
+        pdf.set_font("Helvetica", "", 10)
+        for item in productos_items:
+            producto = item.get("Producto", "")
+            unidades = item.get("Unidades", 0)
+            pdf.cell(100, 7, str(producto)[:30], border=1)
+            pdf.cell(40, 7, str(unidades), border=1, align="R")
+            pdf.ln()
+
+        # Retornar PDF como bytes (conversión explícita)
+        return bytes(pdf.output())
+    except Exception as e:
+        print(f"[ERROR] Error generando PDF remito: {e}")
+        return None
+
 
 # --- ESTILOS CSS ---
 st.markdown(
@@ -1935,8 +1994,10 @@ if perfil in ["admin", "encargado"]:
                             # --- BOTONES DE ACCIÓN (aparecen siempre, habilitados solo para admin) ---
                             st.write("**Acciones disponibles:**")
 
-                            # Crear 5 columnas para los botones de acción
-                            col_mod, col_ver, col_anu, col_res, col_des = st.columns(5)
+                            # Crear 6 columnas para los botones de acción
+                            col_mod, col_ver, col_anu, col_res, col_rem, col_des = (
+                                st.columns(6)
+                            )
 
                             # Botón 1: Modificar
                             with col_mod:
@@ -2127,7 +2188,52 @@ if perfil in ["admin", "encargado"]:
                                         else:
                                             st.error(f"❌ {mensaje}")
 
-                            # Botón 5: Descargar
+                            # Botón 5: Generar Remito PDF
+                            with col_rem:
+                                remito_disponible = estado_actual == "Reservado"
+                                if st.button(
+                                    "📄 Generar Remito",
+                                    use_container_width=True,
+                                    disabled=not es_admin or not remito_disponible,
+                                    key=f"btn_remito_{pedido_id}",
+                                ):
+                                    if es_admin and remito_disponible:
+                                        # Obtener datos del pedido
+                                        detalle_pedido = df_pendientes[
+                                            df_pendientes["ID_Pedido"].astype(str)
+                                            == pedido_id
+                                        ]
+                                        if not detalle_pedido.empty:
+                                            cliente_nombre = detalle_pedido.iloc[0][
+                                                "Cliente"
+                                            ]
+                                            productos = detalle_pedido[
+                                                ["Producto", "Unidades"]
+                                            ].to_dict("records")
+
+                                            # Generar PDF
+                                            pdf_bytes = generar_pdf_remito(
+                                                pedido_id, cliente_nombre, productos
+                                            )
+
+                                            if pdf_bytes:
+                                                st.download_button(
+                                                    label="💾 Descargar Remito",
+                                                    data=pdf_bytes,
+                                                    file_name=f"remito_{pedido_id}.pdf",
+                                                    mime="application/pdf",
+                                                    use_container_width=True,
+                                                )
+                                            else:
+                                                st.error(
+                                                    "❌ Error al generar el remito."
+                                                )
+                                        else:
+                                            st.error(
+                                                "❌ No se encontraron datos del pedido."
+                                            )
+
+                            # Botón 6: Descargar
                             with col_des:
                                 if st.button(
                                     "⬇️ Descargar",

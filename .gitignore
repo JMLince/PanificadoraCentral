@@ -1,10 +1,29 @@
-# Datos de la aplicación (CSV)
+# --- Datos de la aplicación ---
 data/*.csv
+*.log
+*.database
+*.db
 
-# Entornos virtuales de Python
+# --- Entornos virtuales y dependencias ---
 venv/
 .env
+.venv/
+env/
+# Archivo de configuración de variables de entorno
+!.env.example 
 
-# Archivos temporales de sistema
+# --- Python / Compilación ---
 __pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# --- Editores y Herramientas (VS Code / Cursor) ---
+.vscode/
+.cursor/
+.history/
+.idea/
+
+# --- Sistema ---
 .DS_Store
+Thumbs.db
